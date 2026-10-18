@@ -1,0 +1,37 @@
+{
+  "schemaVersion": "1.0.0",
+  "snapshotId": "snapshot_demo_42",
+  "sourceDeviceId": "mac_demo",
+  "sourceEpoch": "epoch_demo",
+  "sourceSequence": 42,
+  "capturedAt": "2026-09-05T01:41:00Z",
+  "windows": [
+    {
+      "id": "codex-primary",
+      "providerId": "codex",
+      "accountId": "account_demo",
+      "accountAlias": "个人账户",
+      "quotaKey": "primary",
+      "sharedPoolId": null,
+      "unit": "percent",
+      "currency": null,
+      "availability": "available",
+      "remainingBps": 0,
+      "amount": null,
+      "limit": null,
+      "quality": "reported",
+      "sourceMethod": "local_rpc",
+      "fetchOutcome": "ok",
+      "observedAt": "2026-09-05T01:41:00Z",
+      "staleAt": "2026-09-05T01:51:00Z",
+      "window": {
+        "kind": "fixed",
+        "durationSeconds": 18000,
+        "startsAt": "2026-09-04T23:30:00Z",
+        "resetsAt": "2026-09-05T04:30:00Z",
+        "periodId": "demo_period_01"
+      },
+      "history": []
+    }
+  ]
+}

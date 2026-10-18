@@ -1,0 +1,162 @@
+name: Internal TestFlight
+
+# Dispatch this workflow on main. A tag never supplies the privileged workflow.
+# All following build/sign/upload/readback steps run automatically after approval.
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Reviewed annotated tag: testflight/ios/v0.1.4-b11'
+        required: true
+        type: string
+      platform:
+        description: 'macOS currently reports its sandbox blocker before signing'
+        required: true
+        type: choice
+        options: [ios, macos]
+        default: ios
+      publish:
+        description: 'Upload to the existing internal TestFlight group after checks'
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: internal-testflight-${{ inputs.release_tag }}
+  cancel-in-progress: false
+
+jobs:
+  release-selector:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      commit: ${{ steps.ref.outputs.commit }}
+      tagObject: ${{ steps.ref.outputs.tagObject }}
+      version: ${{ steps.ref.outputs.version }}
+      buildNumber: ${{ steps.ref.outputs.buildNumber }}
+    steps:
+      - name: Reject unsupported platform before credentials or environment approval
+        env:
+          PLATFORM: ${{ inputs.platform }}
+        run: |
+          if [ "$PLATFORM" != ios ]; then
+            echo 'macOS TestFlight is blocked: AmmoDesktop is unsandboxed and reads local provider credentials. A separately designed sandboxed distribution target is required; see docs/github-actions.md.' >&2
+            exit 1
+          fi
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+      - name: Verify trusted workflow, environment restrictions and immutable tag
+        id: ref
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: node scripts/ci/release-ref.mjs
+
+  ios:
+    needs: release-selector
+    runs-on: macos-15
+    environment: testflight-internal
+    timeout-minutes: 90
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.2.app/Contents/Developer
+      APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
+      IOS_BUNDLE_ID: ${{ vars.IOS_BUNDLE_ID }}
+      QI_APP_GROUP: ${{ vars.QI_APP_GROUP }}
+      QI_ICLOUD_CONTAINER: ${{ vars.QI_ICLOUD_CONTAINER }}
+      ASC_INTERNAL_GROUP_ID: ${{ vars.ASC_INTERNAL_GROUP_ID }}
+      TESTFLIGHT_ENABLED: ${{ vars.TESTFLIGHT_ENABLED }}
+      IOS_BUILD_NUMBER: ${{ needs.release-selector.outputs.buildNumber }}
+      CI_UPLOAD_AUTHORIZED: ${{ inputs.publish && 'true' || 'false' }}
+      ASC_TELEMETRY_DISABLED: '1'
+      DO_NOT_TRACK: '1'
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ needs.release-selector.outputs.commit }}
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+      - name: Check release settings
+        run: |
+          test "$TESTFLIGHT_ENABLED" = true
+          test -n "$APPLE_TEAM_ID"
+          test -n "$IOS_BUNDLE_ID"
+          test -n "$QI_APP_GROUP"
+          test -n "$QI_ICLOUD_CONTAINER"
+          test -n "$ASC_INTERNAL_GROUP_ID"
+      - name: Install verified build tooling
+        run: bash scripts/ci/setup-apple.sh
+      - name: Run release safety tests
+        run: |
+          node --test tests/release/*.mjs scripts/ci/*.test.mjs
+          python3 -m unittest discover -s scripts/ci -p 'test_*.py'
+          python3 -m unittest discover -s tests/release -p 'test_*.py'
+      - name: Build and smoke test iOS simulator from the release commit
+        run: |
+          bash scripts/ci/apple-build.sh ios
+          python3 scripts/ci/simulator-smoke.py
+      - name: Import existing signing assets into a temporary keychain
+        env:
+          IOS_DISTRIBUTION_CERTIFICATE_BASE64: ${{ secrets.IOS_DISTRIBUTION_CERTIFICATE_BASE64 }}
+          IOS_DISTRIBUTION_CERTIFICATE_PASSWORD: ${{ secrets.IOS_DISTRIBUTION_CERTIFICATE_PASSWORD }}
+          IOS_APP_PROFILE_BASE64: ${{ secrets.IOS_APP_PROFILE_BASE64 }}
+          IOS_WIDGET_PROFILE_BASE64: ${{ secrets.IOS_WIDGET_PROFILE_BASE64 }}
+          ASC_API_KEY_ID: ${{ secrets.ASC_API_KEY_ID }}
+          ASC_API_KEY_P8_B64: ${{ secrets.ASC_API_KEY_P8_B64 }}
+        run: python3 scripts/ci/signing.py prepare
+      - name: Generate manually signed project and install narrow ASC adapter
+        run: |
+          xcodegen generate --spec .build/ci-signing.json --project-root . --project .
+          mkdir -p .build/ci-bin
+          ln -s "$PWD/scripts/ci/asc.mjs" .build/ci-bin/asc
+          echo "$PWD/.build/ci-bin" >> "$GITHUB_PATH"
+      - name: Recheck selected ref and prepare verified internal-only IPA
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          ASC_API_KEY_ID: ${{ secrets.ASC_API_KEY_ID }}
+          ASC_API_ISSUER_ID: ${{ secrets.ASC_API_ISSUER_ID }}
+        run: |
+          node scripts/ci/release-ref.mjs
+          node scripts/testflight-ios.mjs --prepare
+      - name: Upload once through existing artifact-bound gates
+        if: ${{ inputs.publish }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          ASC_API_KEY_ID: ${{ secrets.ASC_API_KEY_ID }}
+          ASC_API_ISSUER_ID: ${{ secrets.ASC_API_ISSUER_ID }}
+        run: |
+          node scripts/ci/release-ref.mjs
+          node scripts/ci/testflight.mjs upload
+      - name: Verify exact Apple build and existing internal group
+        if: ${{ inputs.publish }}
+        env:
+          ASC_API_KEY_ID: ${{ secrets.ASC_API_KEY_ID }}
+          ASC_API_ISSUER_ID: ${{ secrets.ASC_API_ISSUER_ID }}
+        run: node scripts/ci/testflight.mjs readback
+      - name: Publish non-sensitive verification receipt and fresh simulator screenshot
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: internal-testflight-verification-${{ needs.release-selector.outputs.buildNumber }}
+          path: |
+            .build/ci/testflight-receipt.json
+            .build/ci/ios-simulator-smoke.png
+            .build/ci/simulator-smoke.json
+          include-hidden-files: true
+          retention-days: 7
+          if-no-files-found: error
+      - name: Remove temporary signing identities, profiles and API key
+        if: ${{ always() }}
+        run: python3 scripts/ci/signing.py cleanup

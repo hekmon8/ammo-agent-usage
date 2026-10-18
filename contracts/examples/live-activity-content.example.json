@@ -1,0 +1,16 @@
+{
+  "attributes": {
+    "sessionID": "monitor_demo",
+    "windowID": "codex-primary",
+    "endsAt": 1788576060
+  },
+  "contentState": {
+    "label": "Codex · 5h",
+    "remainingBps": 6800,
+    "displayState": "fresh",
+    "observedAt": 1788572460,
+    "staleAt": 1788573060,
+    "resetsAt": 1788582600,
+    "sequence": 42
+  }
+}

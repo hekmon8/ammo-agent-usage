@@ -1,0 +1,372 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://quota-island.example/schemas/snapshot/1.0.0",
+  "title": "Ammo Snapshot v1 (design contract)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "snapshotId",
+    "sourceDeviceId",
+    "sourceEpoch",
+    "sourceSequence",
+    "capturedAt",
+    "windows"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "1.0.0"
+    },
+    "snapshotId": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{1,80}$"
+    },
+    "sourceDeviceId": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{1,80}$"
+    },
+    "sourceEpoch": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{1,80}$"
+    },
+    "sourceSequence": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991
+    },
+    "capturedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "windows": {
+      "type": "array",
+      "maxItems": 80,
+      "items": {
+        "$ref": "#/$defs/quota"
+      }
+    }
+  },
+  "$defs": {
+    "window": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "durationSeconds",
+        "startsAt",
+        "resetsAt",
+        "periodId"
+      ],
+      "properties": {
+        "kind": {
+          "enum": [
+            "rolling",
+            "fixed",
+            "calendar",
+            "unknown"
+          ]
+        },
+        "durationSeconds": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1,
+          "maximum": 31622400
+        },
+        "startsAt": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "resetsAt": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "periodId": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{1,80}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "quota": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "providerId",
+        "accountId",
+        "accountAlias",
+        "quotaKey",
+        "sharedPoolId",
+        "unit",
+        "currency",
+        "availability",
+        "remainingBps",
+        "amount",
+        "limit",
+        "quality",
+        "sourceMethod",
+        "fetchOutcome",
+        "observedAt",
+        "staleAt",
+        "window",
+        "history"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{1,80}$"
+        },
+        "providerId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{1,80}$"
+        },
+        "accountId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{1,80}$"
+        },
+        "accountAlias": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 48
+        },
+        "quotaKey": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{1,80}$"
+        },
+        "sharedPoolId": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{1,80}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "unit": {
+          "enum": [
+            "percent",
+            "tokens",
+            "requests",
+            "credits",
+            "money"
+          ]
+        },
+        "currency": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[A-Z]{3}$"
+        },
+        "availability": {
+          "enum": [
+            "available",
+            "unavailable",
+            "unlimited"
+          ]
+        },
+        "remainingBps": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 10000
+        },
+        "amount": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]{1,12})?$",
+          "maxLength": 48
+        },
+        "limit": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]{1,12})?$",
+          "maxLength": 48
+        },
+        "quality": {
+          "enum": [
+            "reported",
+            "estimated",
+            "unknown"
+          ]
+        },
+        "sourceMethod": {
+          "enum": [
+            "official_api",
+            "local_rpc",
+            "local_file",
+            "community_endpoint",
+            "user_defined"
+          ]
+        },
+        "fetchOutcome": {
+          "enum": [
+            "ok",
+            "auth_required",
+            "error",
+            "throttled",
+            "disabled"
+          ]
+        },
+        "observedAt": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "staleAt": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "window": {
+          "$ref": "#/$defs/window"
+        },
+        "history": {
+          "type": "array",
+          "maxItems": 48,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "observedAt",
+              "remainingBps",
+              "segmentId"
+            ],
+            "properties": {
+              "observedAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "remainingBps": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "minimum": 0,
+                "maximum": 10000
+              },
+              "segmentId": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9_-]{1,80}$"
+              }
+            }
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "unit": {
+                "const": "money"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "currency": {
+                "type": "string",
+                "pattern": "^[A-Z]{3}$"
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "currency": {
+                "type": "null"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "availability": {
+                "enum": [
+                  "unavailable",
+                  "unlimited"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "remainingBps": {
+                "type": "null"
+              },
+              "amount": {
+                "type": "null"
+              },
+              "limit": {
+                "type": "null"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "availability": {
+                "const": "available"
+              }
+            }
+          },
+          "then": {
+            "anyOf": [
+              {
+                "properties": {
+                  "remainingBps": {
+                    "type": "integer"
+                  }
+                }
+              },
+              {
+                "properties": {
+                  "amount": {
+                    "type": "string"
+                  }
+                }
+              }
+            ],
+            "properties": {
+              "observedAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "staleAt": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

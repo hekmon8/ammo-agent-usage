@@ -1,0 +1,101 @@
+name: Checks
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: checks-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+jobs:
+  contracts-worker:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.13'
+      - run: python -m pip install -r scripts/requirements.lock.txt
+      - run: npm ci --ignore-scripts
+      - run: npm --prefix workers/lite ci
+      - run: python scripts/test_contracts.py
+      - run: python scripts/check_l10n.py
+      - run: python scripts/ci/generate-provider-placeholders.py --check
+      - run: npm run test:contracts
+      - run: python -m unittest discover -s tests/release -p 'test_*.py'
+      - run: node --test tests/release/*.mjs
+      - run: node --test scripts/ci/*.test.mjs
+      - run: python -m unittest discover -s scripts/ci -p 'test_*.py'
+      - run: npm --prefix workers/lite run check
+      - run: npm --prefix workers/lite run test:push
+      - run: npm --prefix workers/lite run test:activity-v2
+      - run: npm --prefix workers/lite run test:activity-v2:workerd
+      - run: npm --prefix workers/lite run test:http
+      - run: npm audit --audit-level=high
+      - run: npm --prefix workers/lite audit --audit-level=high
+  ios-simulator:
+    runs-on: macos-15
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.2.app/Contents/Developer
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - run: bash scripts/ci/setup-apple.sh
+      - run: bash scripts/ci/apple-build.sh ios
+      - run: python3 scripts/ci/simulator-smoke.py
+      - name: Upload simulator app and launch evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: Ammo-iOS-Simulator
+          path: |
+            .build/ci/Ammo-iOS-Simulator.zip
+            .build/ci/ios-simulator-smoke.png
+            .build/ci/simulator-smoke.json
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 7
+  macos:
+    runs-on: macos-15
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.2.app/Contents/Developer
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - run: bash scripts/ci/setup-apple.sh
+      - run: bash scripts/ci/apple-build.sh macos
+      - name: Upload unsigned native macOS app
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: Ammo-macOS-unsigned
+          path: .build/ci/Ammo-macOS-unsigned.zip
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 7
+  secrets:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Scan actual checkout and complete fetched Git history
+        run: |
+          curl --fail --location --retry 2 https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz -o /tmp/gitleaks.tar.gz
+          echo '551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb  /tmp/gitleaks.tar.gz' | sha256sum --check
+          mkdir /tmp/gitleaks-bin
+          tar -xzf /tmp/gitleaks.tar.gz -C /tmp/gitleaks-bin
+          /tmp/gitleaks-bin/gitleaks dir . --config .gitleaks.toml --redact --no-banner
+          /tmp/gitleaks-bin/gitleaks git . --log-opts='--all' --config .gitleaks.toml --redact --no-banner

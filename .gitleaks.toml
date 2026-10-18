@@ -1,0 +1,9 @@
+title = "Ammo public synthetic cryptography vectors"
+[extend]
+useDefault = true
+[[allowlists]]
+description = "Only the two exact public deterministic test keys, in the two golden-vector input files"
+condition = "AND"
+paths = ['''contracts/examples/(key-wrap-input|crypto-golden-vector)\.TEST-ONLY\.json$''']
+regexTarget = "secret"
+regexes = ['''^(AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8|ICEiIyQlJicoKSorLC0uLzAxMjM0NTY3ODk6Ozw9Pj8)$''']

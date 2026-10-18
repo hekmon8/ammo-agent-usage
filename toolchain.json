@@ -1,0 +1,25 @@
+{
+  "baseline": "round-2-local-2026-09-05",
+  "xcode": "26.6",
+  "xcodeBuild": "17F113",
+  "swiftCompiler": "6.3.3",
+  "swiftLanguageMode": "6",
+  "macOSSDK": "26.5",
+  "iOSSimulatorSDK": "26.5",
+  "deploymentTargets": {
+    "macOS": "14.0",
+    "iOS": "17.0"
+  },
+  "typescript": "5.9.3",
+  "pythonDependencies": "scripts/requirements.lock.txt",
+  "swiftExternalDependencies": [
+    {
+      "url": "https://github.com/modelcontextprotocol/swift-sdk.git",
+      "version": "0.12.1",
+      "lock": "Package.resolved"
+    }
+  ],
+  "wrangler": "4.145.0",
+  "wranglerStatus": "local-types-push-http-validated",
+  "xcodegen": "2.43.0"
+}

@@ -1,0 +1,150 @@
+name: Ammo
+options:
+  minimumXcodeGenVersion: 2.43.0
+  developmentLanguage: zh-Hans
+  deploymentTarget:
+    iOS: '17.0'
+    macOS: '14.0'
+configFiles:
+  Debug: config/Signing.xcconfig
+  Release: config/Signing.xcconfig
+settings:
+  base:
+    SWIFT_VERSION: '6.0'
+    CURRENT_PROJECT_VERSION: 10
+    MARKETING_VERSION: 0.1.4
+    CODE_SIGN_STYLE: Automatic
+packages:
+  Ammo:
+    path: .
+targets:
+  AmmoDesktop:
+    type: application
+    platform: macOS
+    sources: [apps/macos, native/Mac/Assets.xcassets, native/Shared/PrivacyInfo.xcprivacy, native/Shared/ThirdPartyNotices.txt]
+    dependencies:
+      - package: Ammo
+        products: [QuotaPhone, QuotaCore, QuotaDesign, QuotaStore, QuotaProviders, QuotaCollector, QuotaIPC, QuotaSync]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(QI_BUNDLE_PREFIX).mac
+        PRODUCT_NAME: Ammo
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ENABLE_HARDENED_RUNTIME: true
+    info:
+      path: native/Mac/Info.plist
+      properties:
+        CFBundleDisplayName: Ammo
+        CFBundleLocalizations: [zh-Hans, en]
+        CFBundleDevelopmentRegion: zh-Hans
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        LSUIElement: true
+        QuotaICloudContainer: $(QI_ICLOUD_CONTAINER)
+        QuotaHostedSyncEndpoint: $(QI_HOSTED_SYNC_ENDPOINT)
+    entitlements:
+      path: native/Mac/Ammo.entitlements
+      properties:
+        com.apple.developer.icloud-container-identifiers: [$(QI_ICLOUD_CONTAINER)]
+        com.apple.developer.icloud-services: [CloudKit]
+  AmmoPhone:
+    type: application
+    platform: iOS
+    sources: [native/Phone, native/Shared]
+    dependencies:
+      - package: Ammo
+        products: [QuotaPhone, QuotaWidgets, QuotaCore, QuotaSync, QuotaStore]
+      - target: AmmoWidgets
+        embed: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(QI_BUNDLE_PREFIX)
+        TARGETED_DEVICE_FAMILY: '1'
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+      configs:
+        Debug:
+          QI_APNS_ENVIRONMENT: sandbox
+          QI_APNS_ENTITLEMENT: development
+        Release:
+          QI_APNS_ENVIRONMENT: production
+          QI_APNS_ENTITLEMENT: production
+    info:
+      path: native/Phone/Info.plist
+      properties:
+        CFBundleDisplayName: Ammo
+        CFBundleLocalizations: [zh-Hans, en]
+        CFBundleDevelopmentRegion: zh-Hans
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+        NSSupportsLiveActivities: true
+        # Background fetch refreshes the verified snapshot for an in-progress
+        # monitoring session; the system schedules it, no fixed cadence promised.
+        BGTaskSchedulerPermittedIdentifiers: [$(PRODUCT_BUNDLE_IDENTIFIER).refresh]
+        UIBackgroundModes: [fetch]
+        # Camera scans pairing and quota-sharing QR codes; no images are stored.
+        NSCameraUsageDescription: 扫描设备配对或额度分享二维码。
+        # Add-only permission is requested only after tapping Save Image.
+        NSPhotoLibraryAddUsageDescription: 将你选择的 Token 用量小票保存到照片。
+        QuotaAPNSEnvironment: $(QI_APNS_ENVIRONMENT)
+        # Uses encryption exclusively through Apple CryptoKit and system TLS.
+        # Apple's export-compliance table exempts encryption within the Apple OS.
+        ITSAppUsesNonExemptEncryption: false
+        QuotaICloudContainer: $(QI_ICLOUD_CONTAINER)
+        QuotaHostedSyncEndpoint: $(QI_HOSTED_SYNC_ENDPOINT)
+        QuotaAppGroup: $(QI_APP_GROUP)
+        QuotaKeychainGroup: $(AppIdentifierPrefix)$(QI_BUNDLE_PREFIX).sync
+        CFBundleURLTypes:
+          - CFBundleURLSchemes: [quotaisland]
+    entitlements:
+      path: native/Phone/Ammo.entitlements
+      properties:
+        com.apple.developer.icloud-container-identifiers: [$(QI_ICLOUD_CONTAINER)]
+        com.apple.developer.icloud-services: [CloudKit]
+        aps-environment: $(QI_APNS_ENTITLEMENT)
+        com.apple.security.application-groups: [$(QI_APP_GROUP)]
+        keychain-access-groups: [$(AppIdentifierPrefix)$(QI_BUNDLE_PREFIX).sync]
+  AmmoWidgets:
+    type: app-extension
+    platform: iOS
+    sources: [native/Widgets, native/Shared]
+    dependencies:
+      - package: Ammo
+        products: [QuotaWidgets, QuotaCore, QuotaSync, QuotaStore]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(QI_BUNDLE_PREFIX).widgets
+        SKIP_INSTALL: true
+        APPLICATION_EXTENSION_API_ONLY: true
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+    info:
+      path: native/Widgets/Info.plist
+      properties:
+        CFBundleDisplayName: Ammo
+        CFBundleLocalizations: [zh-Hans, en]
+        CFBundleDevelopmentRegion: zh-Hans
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+        QuotaICloudContainer: $(QI_ICLOUD_CONTAINER)
+        QuotaHostedSyncEndpoint: $(QI_HOSTED_SYNC_ENDPOINT)
+        QuotaAppGroup: $(QI_APP_GROUP)
+        QuotaKeychainGroup: $(AppIdentifierPrefix)$(QI_BUNDLE_PREFIX).sync
+    entitlements:
+      path: native/Widgets/Ammo.entitlements
+      properties:
+        com.apple.developer.icloud-container-identifiers: [$(QI_ICLOUD_CONTAINER)]
+        com.apple.developer.icloud-services: [CloudKit]
+        com.apple.security.application-groups: [$(QI_APP_GROUP)]
+        keychain-access-groups: [$(AppIdentifierPrefix)$(QI_BUNDLE_PREFIX).sync]
+schemes:
+  AmmoDesktop:
+    build:
+      targets:
+        AmmoDesktop: all
+  AmmoPhone:
+    build:
+      targets:
+        AmmoPhone: all

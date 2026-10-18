@@ -1,0 +1,10 @@
+{
+  "warning": "PUBLIC SYNTHETIC TEST VECTOR. Never use these keys or deterministic nonces in production.",
+  "aesKeyBase64url": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8",
+  "sourceSigningSeedBase64url": "ICEiIyQlJicoKSorLC0uLzAxMjM0NTY3ODk6Ozw9Pj8",
+  "sourceSigningPublicKeyBase64url": "Kay64UG8yvCyLhqU000LxzYeUm0L_hLIl5S8kyKWbdc",
+  "plaintextFixture": "../fixtures/01-fresh.json",
+  "envelopeFile": "envelope.example.json",
+  "aadUtf8": "QI|1|ws_demo|mac_demo|epoch_demo|42|key_demo_v1",
+  "signatureMessageSha256": "d8932161774c4d87e06e4a5fb49a3e3f1ae9125e1aa132291e7dc537c6242262"
+}

@@ -1,0 +1,21 @@
+"resetReminder.toggle" = "此设备额度重置提醒";
+"resetReminder.lead" = "重置前提醒";
+"resetReminder.minutes" = "%d 分钟";
+"resetReminder.off" = "额度重置提醒已关闭。";
+"resetReminder.waiting" = "等待新鲜的额度观测。";
+"resetReminder.denied" = "请在系统设置中允许通知，以使用重置提醒。";
+"resetReminder.unavailable" = "未能安排提醒，请尝试刷新。";
+"resetReminder.storageError" = "无法保存提醒状态。修复存储前，提醒保持关闭。";
+"resetReminder.retained" = "离线或数据过期：保留已安排的重置预测，不添加新提醒。";
+"resetReminder.clockUncertain" = "设备时间不确定，已暂停新增提醒。请检查系统时间；时间回退后，需要追上上次评估时间才能恢复，单次刷新不会清除此限制。";
+"resetReminder.suppressed" = "部分周期已处理，或无法确认是否送达、是否取消；重置前不会重复提醒。";
+"resetReminder.scheduled" = "本周期已安排或已处理 %d 个重置预测。";
+"resetReminder.capped" = "提醒容量已满：保留 %d 个重置预测；此设备最多同时安排 48 个。";
+"resetReminder.footer" = "默认关闭。使用此设备的本地通知，与 Cloudflare 提醒分别设置。提醒依据上次已验证的重置预测，刷新额度后可能变化。更改时机需要在原提醒时间前确认取消；无法确认时，该周期会保持不重复，直到重置。系统设置、专注模式和休眠会影响送达。";
+"resetReminder.notification.title" = "%@ 额度重置预测";
+"resetReminder.notification.body" = "%@ · %@ 预计将于 %@ 重置，请刷新 Ammo 确认。";
+
+"resetReminder.toggle.mac" = "Mac 重置提醒";
+"resetReminder.toggle.phone" = "iPhone 重置提醒";
+"resetReminder.deviceScope" = "只控制这台设备；两端分别设置。";
+"resetReminder.details" = "提醒说明";

@@ -1,0 +1,6 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://quota-island.example/schemas/mcp/quota-history-input/1.0.0",
+  "type": "object", "additionalProperties": false, "required": ["windowId", "range"],
+  "properties": {"windowId": {"type": "string", "minLength": 1, "maxLength": 80}, "range": {"type": "string", "pattern": "^[1-9][0-9]*[mh]$"}}
+}

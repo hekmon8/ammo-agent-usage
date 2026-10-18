@@ -1,0 +1,95 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Native Live Activity content (epoch seconds)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "attributes",
+    "contentState"
+  ],
+  "properties": {
+    "attributes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sessionID",
+        "windowID",
+        "endsAt"
+      ],
+      "properties": {
+        "sessionID": {
+          "type": "string",
+          "minLength": 1
+        },
+        "windowID": {
+          "type": "string",
+          "minLength": 1
+        },
+        "endsAt": {
+          "type": "integer"
+        }
+      }
+    },
+    "contentState": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "label",
+        "displayState",
+        "sequence"
+      ],
+      "properties": {
+        "label": {
+          "type": "string",
+          "maxLength": 48
+        },
+        "remainingBps": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 10000
+        },
+        "displayState": {
+          "type": "string",
+          "enum": [
+            "fresh",
+            "low",
+            "exhausted",
+            "stale",
+            "resetPending",
+            "unavailable",
+            "unlimited",
+            "authRequired",
+            "offline",
+            "locked",
+            "clockSkew"
+          ]
+        },
+        "observedAt": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "staleAt": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "resetsAt": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "sequence": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    }
+  }
+}

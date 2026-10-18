@@ -1,0 +1,8 @@
+{
+  "version": 2,
+  "bundleRevision": 12,
+  "rows": [
+    { "windowID": "codex-five-hour", "remainingBps": 4200, "displayState": "fresh", "observedAt": 1791334800, "staleAt": 1791335700, "resetsAt": 1791349200, "sequence": 19 },
+    { "windowID": "claude-week", "remainingBps": null, "displayState": "unavailable", "observedAt": null, "staleAt": null, "resetsAt": null, "sequence": 0 }
+  ]
+}

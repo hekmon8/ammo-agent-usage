@@ -1,0 +1,4 @@
+/* System permission dialogs; the plist values are the zh-Hans development
+   defaults and these overrides localize them for each language. */
+"NSCameraUsageDescription" = "Ammo scans QR codes to pair this device or receive a shared quota.";
+"NSPhotoLibraryAddUsageDescription" = "Ammo saves the token receipt you choose to your photo library.";

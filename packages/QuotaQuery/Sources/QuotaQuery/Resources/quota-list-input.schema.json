@@ -1,0 +1,6 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://quota-island.example/schemas/mcp/quota-list-input/1.0.0",
+  "type": "object", "additionalProperties": false,
+  "properties": {"providerId": {"type": "string", "minLength": 1, "maxLength": 80}, "includeStale": {"type": "boolean"}}
+}

@@ -1,0 +1,6 @@
+{
+  "warning": "PUBLIC SYNTHETIC INPUT, not production keys",
+  "context": "ws_demo|mac_demo|epoch_demo|key_demo_v1|claim_demo",
+  "snapshotKeyBase64url": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8",
+  "recipientPrivateKeyBase64url": "ICEiIyQlJicoKSorLC0uLzAxMjM0NTY3ODk6Ozw9Pj8"
+}

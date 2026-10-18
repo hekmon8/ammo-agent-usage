@@ -1,0 +1,9 @@
+/* Widget configuration intent strings. These duplicate the shared QuotaCore
+   table because AppIntents metadata requires literal keys that resolve against
+   the widget extension's own bundle. Keep both tables in sync. */
+"widget.intent.typeName" = "Quota";
+"widget.intent.title" = "Choose quotas";
+"widget.intent.description" = "Choose up to two quotas. The circular Lock Screen widget shows only the first.";
+"widget.intent.primaryWindow" = "Primary quota";
+"widget.intent.secondaryWindow" = "Second quota";
+"widget.intent.configDescription" = "Shows the latest verified quota records from your Mac.";

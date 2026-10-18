@@ -1,0 +1,6 @@
+DEVELOPMENT_TEAM =
+QI_BUNDLE_PREFIX = org.example.ammo
+QI_APP_GROUP = group.$(QI_BUNDLE_PREFIX)
+QI_ICLOUD_CONTAINER = iCloud.$(QI_BUNDLE_PREFIX)
+QI_HOSTED_SYNC_ENDPOINT =
+#include? "Signing.local.xcconfig"

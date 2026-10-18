@@ -1,0 +1,8 @@
+/* AppIntents metadata is included in both Phone and Widget bundles.
+   Keep these six keys aligned with the Widget and shared QuotaCore tables. */
+"widget.intent.typeName" = "额度";
+"widget.intent.title" = "选择额度";
+"widget.intent.description" = "最多选择两项额度。圆形锁屏组件仅显示第一项。";
+"widget.intent.primaryWindow" = "主要额度";
+"widget.intent.secondaryWindow" = "第二项额度";
+"widget.intent.configDescription" = "查看 Mac 最近验证的额度记录。";

@@ -1,0 +1,24 @@
+{
+  "name": "@quota-island/worker-lite",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "check": "tsc -p tsconfig.json",
+    "migrate:local": "wrangler d1 migrations apply DB --local --config wrangler.jsonc",
+    "test:http": "node --test test/http-boundary.mjs test/share-http.mjs test/usage-http.mjs",
+    "test:usage": "AMMO_USAGE_SQLITE=1 node --test test/usage-http.mjs",
+    "test:push": "node --test test/push-transport.mjs test/live-projection.mjs",
+    "test:activity-v2": "node --test test/single-activity.mjs",
+    "test:activity-v2:workerd": "node --test test/single-activity-workerd.mjs"
+  },
+  "devDependencies": {
+    "typescript": "5.9.3",
+    "wrangler": "4.145.0"
+  },
+  "overrides": {
+    "miniflare@5.20260930.0-alpha": {
+      "sharp": "0.35.5"
+    }
+  }
+}

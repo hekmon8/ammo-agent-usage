@@ -1,0 +1,2272 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Ammo Worker Lite",
+    "version": "1.0.0",
+    "description": "Design contract, not a deployed service. D1-backed authorization and monotonic writes. All .example URLs are placeholders."
+  },
+  "servers": [
+    {
+      "url": "https://quota-island.example",
+      "description": "PLACEHOLDER ONLY"
+    }
+  ],
+  "paths": {
+    "/v1/usage": {
+      "get": {
+        "operationId": "getUsage",
+        "summary": "Return latest encrypted token aggregate from the pinned Mac; independent of quota sync",
+        "security": [
+          {
+            "deviceBearer": []
+          }
+        ],
+        "x-required-role": "viewer",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "envelope",
+                    "receipt"
+                  ],
+                  "properties": {
+                    "envelope": {
+                      "$ref": "#/components/schemas/UsageEnvelope"
+                    },
+                    "receipt": {
+                      "$ref": "#/components/schemas/Receipt"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credential",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Role/tenant not permitted",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "State or sequence conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Payload too large",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Unchanged; does not imply business data is fresh"
+          },
+          "404": {
+            "description": "No usage published, latest ciphertext expired, or unsupported on older Worker; client keeps timestamped last-good cache if present"
+          }
+        },
+        "parameters": [
+          {
+            "name": "If-None-Match",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "put": {
+        "operationId": "putUsage",
+        "summary": "Replace cumulative aggregate; independent monotonic sequence and stable latest retry receipt",
+        "security": [
+          {
+            "deviceBearer": []
+          }
+        ],
+        "x-required-role": "writer",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Receipt"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credential",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Role/tenant not permitted",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "State or sequence conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Payload too large",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UsageEnvelope"
+              }
+            }
+          }
+        },
+        "description": "Requires migration0014. 256KiB envelope, 128KiB decoded ciphertext. Separate QI-USAGE|1| domain. Only latest aggregate and replay watermark retained, no ledger or cross-Mac summation. Ciphertext expires after7days; retry never renews expiry. Old Workers return404. Clients must not fail quota sync if usage upload fails."
+      }
+    },
+    "/v1/capabilities": {
+      "get": {
+        "operationId": "getCapabilities",
+        "summary": "No secret data; protocol and push mode support only",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "schemaVersions",
+                    "pushMode",
+                    "maxEnvelopeBytes",
+                    "serverTime"
+                  ],
+                  "properties": {
+                    "schemaVersions": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "pushMode": {
+                      "enum": [
+                        "disabled",
+                        "own_team",
+                        "managed"
+                      ]
+                    },
+                    "maxEnvelopeBytes": {
+                      "type": "integer"
+                    },
+                    "serverTime": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/bootstrap": {
+      "post": {
+        "operationId": "bootstrap",
+        "summary": "Initialize one workspace and writer while bootstrap is explicitly enabled",
+        "security": [
+          {
+            "bootstrapToken": []
+          }
+        ],
+        "x-required-role": "bootstrap",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "workspaceId",
+                    "deviceId",
+                    "deviceToken",
+                    "sourceEpoch"
+                  ],
+                  "properties": {
+                    "workspaceId": {
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9_-]{1,80}$"
+                    },
+                    "deviceId": {
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9_-]{1,80}$"
+                    },
+                    "deviceToken": {
+                      "type": "string"
+                    },
+                    "sourceEpoch": {
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9_-]{1,80}$"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credential",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Role/tenant not permitted",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "State or sequence conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Payload too large",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "deviceName",
+                  "sourcePublicKey"
+                ],
+                "properties": {
+                  "deviceName": {
+                    "type": "string",
+                    "maxLength": 48
+                  },
+                  "sourcePublicKey": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9_-]+$"
+                  },
+                  "requestId": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9_-]{1,80}$",
+                    "description": "Optional stable bootstrap idempotency key. A matching retry returns the encrypted original credentials for ten minutes while bootstrap remains enabled; reuse with different parameters conflicts."
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/pairings": {
+      "post": {
+        "operationId": "createPairing",
+        "summary": "Create expiring one-time pairing",
+        "security": [
+          {
+            "deviceBearer": []
+          }
+        ],
+        "x-required-role": "writer",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "pairingId",
+                    "expiresAt"
+                  ],
+                  "properties": {
+                    "pairingId": {
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9_-]{1,80}$"
+                    },
+                    "expiresAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credential",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Role/tenant not permitted",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "State or sequence conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Payload too large",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "pairingSecretHash"
+                ],
+                "properties": {
+                  "pairingSecretHash": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/pairings/{pairingId}/claim": {
+      "parameters": [
+        {
+          "name": "pairingId",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,80}$"
+          }
+        }
+      ],
+      "post": {
+        "operationId": "claimPairing",
+        "summary": "Atomic pending -> claimed; no read permission until Mac approves",
+        "security": [
+          {
+            "pairingBearer": []
+          }
+        ],
+        "x-required-role": "pairing",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "claimId",
+                    "claimToken",
+                    "state"
+                  ],
+                  "properties": {
+                    "claimId": {
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9_-]{1,80}$"
+                    },
+                    "claimToken": {
+                      "type": "string"
+                    },
+                    "state": {
+                      "const": "claimed"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credential",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Role/tenant not permitted",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "State or sequence conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Payload too large",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "deviceName",
+                  "recipientPublicKey"
+                ],
+                "properties": {
+                  "deviceName": {
+                    "type": "string",
+                    "maxLength": 48
+                  },
+                  "recipientPublicKey": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9_-]+$"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/pairings/{pairingId}/approve": {
+      "parameters": [
+        {
+          "name": "pairingId",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,80}$"
+          }
+        }
+      ],
+      "post": {
+        "operationId": "approvePairing",
+        "summary": "Approve claimed device after user confirmation",
+        "security": [
+          {
+            "deviceBearer": []
+          }
+        ],
+        "x-required-role": "writer",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "state"
+                  ],
+                  "properties": {
+                    "state": {
+                      "const": "approved"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credential",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Role/tenant not permitted",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "State or sequence conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Payload too large",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "claimId",
+                  "wrappedSnapshotKey",
+                  "keyId",
+                  "sourcePublicKey"
+                ],
+                "properties": {
+                  "claimId": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9_-]{1,80}$"
+                  },
+                  "wrappedSnapshotKey": {
+                    "type": "string",
+                    "maxLength": 4096
+                  },
+                  "keyId": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9_-]{1,80}$"
+                  },
+                  "sourcePublicKey": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9_-]+$"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/pairings/{pairingId}/result": {
+      "parameters": [
+        {
+          "name": "pairingId",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,80}$"
+          }
+        }
+      ],
+      "get": {
+        "operationId": "getPairingResult",
+        "summary": "Claim-specific capability; idempotent approved result until explicit ack",
+        "security": [
+          {
+            "pairingBearer": []
+          }
+        ],
+        "x-required-role": "pairing",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "state",
+                    "deviceId",
+                    "deviceToken",
+                    "wrappedSnapshotKey",
+                    "sourcePublicKey",
+                    "workspaceId",
+                    "sourceDeviceId",
+                    "sourceEpoch",
+                    "keyId"
+                  ],
+                  "properties": {
+                    "state": {
+                      "enum": [
+                        "claimed",
+                        "approved",
+                        "consumed",
+                        "rejected",
+                        "expired"
+                      ]
+                    },
+                    "deviceId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "deviceToken": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "wrappedSnapshotKey": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "sourcePublicKey": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "workspaceId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "sourceDeviceId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "sourceEpoch": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "keyId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credential",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Role/tenant not permitted",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "State or sequence conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Payload too large",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/snapshot": {
+      "get": {
+        "operationId": "getSnapshot",
+        "summary": "Return latest encrypted snapshot; never freshen observedAt on a cache hit",
+        "security": [
+          {
+            "deviceBearer": []
+          }
+        ],
+        "x-required-role": "viewer",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "envelope",
+                    "receipt"
+                  ],
+                  "properties": {
+                    "envelope": {
+                      "$ref": "#/components/schemas/Envelope"
+                    },
+                    "receipt": {
+                      "$ref": "#/components/schemas/Receipt"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credential",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Role/tenant not permitted",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "State or sequence conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Payload too large",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Unchanged; does not imply business data is fresh"
+          },
+          "404": {
+            "description": "No published snapshot yet"
+          }
+        },
+        "parameters": [
+          {
+            "name": "If-None-Match",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "put": {
+        "operationId": "putSnapshot",
+        "summary": "Monotonic source sequence; same seq + same hash is idempotent",
+        "security": [
+          {
+            "deviceBearer": []
+          }
+        ],
+        "x-required-role": "writer",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Receipt"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credential",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Role/tenant not permitted",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "State or sequence conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Payload too large",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Envelope"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/source-key-rotations": {
+      "post": {
+        "operationId": "rotateSourceKey",
+        "summary": "Explicitly rotate the pinned source key and atomically replace active viewer wraps",
+        "security": [{"deviceBearer": []}],
+        "x-required-role": "writer",
+        "responses": {
+          "200": {"description": "Success", "content": {"application/json": {"schema": {"type": "object", "additionalProperties": false, "required": ["workspaceId", "sourceEpoch", "keyId", "serverRevision"], "properties": {"workspaceId": {"type": "string"}, "sourceEpoch": {"type": "string"}, "keyId": {"type": "string"}, "serverRevision": {"type": "integer"}}}}}},
+          "400": {"description": "Invalid request"}, "401": {"description": "Invalid credential"}, "403": {"description": "Role or source proof forbidden"}, "409": {"description": "Epoch changed, active wraps incomplete, or rotation conflict"}, "413": {"description": "Payload too large"}, "429": {"description": "Rate limited"}
+        },
+        "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "./key-rotation.schema.json"}}}}
+      }
+    },
+    "/v1/device-key-wrap": {
+      "get": {
+        "operationId": "getOwnDeviceKeyWrap",
+        "summary": "Viewer retrieves only its active source-epoch HPKE wrap",
+        "security": [{"deviceBearer": []}],
+        "x-required-role": "viewer",
+        "responses": {"200": {"description": "Success", "content": {"application/json": {"schema": {"type": "object", "additionalProperties": false, "required": ["sourceEpoch", "keyId", "wrappedSnapshotKey", "oldSourceEpoch", "newSourcePublicKey", "trustSignature", "sourceDeviceId"], "properties": {"sourceEpoch": {"type": "string"}, "keyId": {"type": "string"}, "wrappedSnapshotKey": {"type": "string"}, "oldSourceEpoch": {"type": "string"}, "newSourcePublicKey": {"type": "string"}, "trustSignature": {"type": "string"}, "sourceDeviceId": {"type": "string"}}}}}}, "401": {"description": "Invalid credential"}, "403": {"description": "Role forbidden"}, "404": {"description": "No active wrap"}}
+      }
+    },
+    "/v1/devices": {
+      "get": {
+        "operationId": "listDevices",
+        "summary": "List paired devices without tokens",
+        "security": [
+          {
+            "deviceBearer": []
+          }
+        ],
+        "x-required-role": "writer",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "deviceId",
+                      "name",
+                      "role",
+                      "revoked",
+                      "recipientPublicKey"
+                    ],
+                    "properties": {
+                      "deviceId": {
+                        "type": "string",
+                        "pattern": "^[A-Za-z0-9_-]{1,80}$"
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "role": {
+                        "enum": [
+                          "writer",
+                          "viewer"
+                        ]
+                      },
+                      "revoked": {
+                        "type": "boolean"
+                      },
+                      "recipientPublicKey": {
+                        "type": ["string", "null"],
+                        "description": "Viewer X25519 recipient key retained from approved pairing; null means the device must re-pair."
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credential",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Role/tenant not permitted",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "State or sequence conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Payload too large",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/devices/{deviceId}": {
+      "parameters": [
+        {
+          "name": "deviceId",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,80}$"
+          }
+        }
+      ],
+      "delete": {
+        "operationId": "revokeDevice",
+        "summary": "Writer may revoke paired viewer; viewer may revoke only self. User confirmation and key rotation required.",
+        "security": [
+          {
+            "deviceBearer": []
+          }
+        ],
+        "x-required-role": "writer-or-self",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "ok"
+                  ],
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credential",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Role/tenant not permitted",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "State or sequence conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Payload too large",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/activities/{activityId}": {
+      "parameters": [
+        {
+          "name": "activityId",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,80}$"
+          }
+        }
+      ],
+      "put": {
+        "operationId": "registerActivity",
+        "summary": "Register/rotate own Live Activity token",
+        "security": [
+          {
+            "deviceBearer": []
+          }
+        ],
+        "x-required-role": "viewer",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "ok"
+                  ],
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credential",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Role/tenant not permitted",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "State or sequence conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Payload too large",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "windowId",
+                  "activityToken",
+                  "environment",
+                  "endsAt",
+                  "projectionConsent"
+                ],
+                "properties": {
+                  "windowId": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9_-]{1,80}$"
+                  },
+                  "activityToken": {
+                    "type": "string",
+                    "maxLength": 1024
+                  },
+                  "environment": {
+                    "enum": [
+                      "sandbox",
+                      "production"
+                    ]
+                  },
+                  "endsAt": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  "projectionConsent": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "endActivity",
+        "summary": "End and remove own activity registration",
+        "security": [
+          {
+            "deviceBearer": []
+          }
+        ],
+        "x-required-role": "viewer",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "ok"
+                  ],
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credential",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Role/tenant not permitted",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "State or sequence conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Payload too large",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/live-projections": {
+      "put": {
+        "operationId": "putLiveProjection",
+        "summary": "Optional, consented minimal readable display fields; not full snapshot E2EE",
+        "security": [
+          {
+            "deviceBearer": []
+          }
+        ],
+        "x-required-role": "writer",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "ok"
+                  ],
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credential",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Role/tenant not permitted",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "State or sequence conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Payload too large",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "sequence",
+                  "windowId",
+                  "label",
+                  "remainingBps",
+                  "displayState",
+                  "observedAt",
+                  "staleAt",
+                  "resetsAt"
+                ],
+                "properties": {
+                  "sequence": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "windowId": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9_-]{1,80}$"
+                  },
+                  "label": {
+                    "type": "string",
+                    "maxLength": 32
+                  },
+                  "remainingBps": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 0,
+                    "maximum": 10000
+                  },
+                  "displayState": {
+                    "enum": [
+                      "fresh",
+                      "low",
+                      "exhausted",
+                      "stale",
+                      "resetPending",
+                      "unavailable",
+                      "unlimited",
+                      "authRequired"
+                    ]
+                  },
+                  "observedAt": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "format": "date-time"
+                  },
+                  "staleAt": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "format": "date-time"
+                  },
+                  "resetsAt": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "format": "date-time"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/pairings/{pairingId}/ack": {
+      "parameters": [
+        {
+          "name": "pairingId",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,80}$"
+          }
+        }
+      ],
+      "post": {
+        "operationId": "ackPairingResult",
+        "summary": "Claim-specific explicit ack after safe local persistence; idempotent consumed transition",
+        "security": [
+          {
+            "pairingBearer": []
+          }
+        ],
+        "x-required-role": "pairing",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "ok"
+                  ],
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credential",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Role/tenant not permitted",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "State or sequence conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Payload too large",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "claimId"
+                ],
+                "properties": {
+                  "claimId": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9_-]{1,80}$"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/pairings/{pairingId}": {
+      "parameters": [
+        {
+          "in": "path",
+          "name": "pairingId",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "get": {
+        "operationId": "getPairingForWriter",
+        "summary": "Writer inspects recipient claim before explicit approval",
+        "security": [
+          {
+            "deviceBearer": []
+          }
+        ],
+        "x-required-role": "writer",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "state",
+                    "claimId",
+                    "deviceName",
+                    "recipientPublicKey",
+                    "expiresAt"
+                  ],
+                  "properties": {
+                    "state": {
+                      "enum": [
+                        "pending",
+                        "claimed",
+                        "approved",
+                        "consumed",
+                        "rejected",
+                        "expired"
+                      ]
+                    },
+                    "claimId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "deviceName": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "recipientPublicKey": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "expiresAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid credential",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Role/tenant not permitted",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "State or sequence conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Payload too large",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/shares": {
+      "get": {
+        "operationId": "listQuotaShares",
+        "summary": "List writer-owned per-instance invitations and grants",
+        "security": [{"deviceBearer": []}], "x-required-role": "writer",
+        "responses": {"200": {"description": "Share records", "content": {"application/json": {"schema": {"type": "array", "items": {"$ref": "#/components/schemas/ShareRecord"}}}}}}
+      },
+      "post": {
+        "operationId": "createQuotaShare",
+        "summary": "Create a ten-minute, single-claim invitation for one account instance",
+        "security": [{"deviceBearer": []}], "x-required-role": "writer",
+        "requestBody": {"required": true, "content": {"application/json": {"schema": {"type": "object", "additionalProperties": false, "required": ["connectionId", "providerId", "accountId", "label", "inviteSecretHash"], "properties": {"connectionId": {"type": "string"}, "providerId": {"type": "string"}, "accountId": {"type": "string"}, "label": {"type": "string"}, "inviteSecretHash": {"type": "string", "pattern": "^[a-f0-9]{64}$"}}}}}},
+        "responses": {"200": {"description": "Invitation metadata; secret is generated only by the writer", "content": {"application/json": {"schema": {"type": "object", "required": ["shareId", "expiresAt"], "properties": {"shareId": {"type": "string"}, "expiresAt": {"type": "string", "format": "date-time"}}}}}}}
+      }
+    },
+    "/v1/shares/{shareId}": {
+      "parameters": [{"name": "shareId", "in": "path", "required": true, "schema": {"type": "string", "pattern": "^[A-Za-z0-9_-]{1,80}$"}}],
+      "delete": {"operationId": "revokeQuotaShare", "summary": "Revoke one recipient and delete its projection", "security": [{"deviceBearer": []}], "x-required-role": "writer", "responses": {"200": {"description": "Revoked"}}}
+    },
+    "/v1/shares/{shareId}/claim": {
+      "parameters": [{"name": "shareId", "in": "path", "required": true, "schema": {"type": "string"}}],
+      "post": {"operationId": "claimQuotaShare", "summary": "Claim once with invite bearer; not yet authorized to read", "security": [{"shareInviteBearer": []}], "requestBody": {"required": true, "content": {"application/json": {"schema": {"type": "object", "required": ["recipientName"], "properties": {"recipientName": {"type": "string"}}}}}}, "responses": {"200": {"description": "Claim capability and verification code"}}}
+    },
+    "/v1/shares/{shareId}/result": {
+      "parameters": [{"name": "shareId", "in": "path", "required": true, "schema": {"type": "string"}}],
+      "get": {"operationId": "getQuotaShareClaimResult", "summary": "Retrieve read grant only after writer approval", "security": [{"shareClaimBearer": []}], "responses": {"200": {"description": "Pending state or approved viewer token"}}}
+    },
+    "/v1/shares/{shareId}/approve": {
+      "parameters": [{"name": "shareId", "in": "path", "required": true, "schema": {"type": "string"}}],
+      "post": {"operationId": "approveQuotaShare", "summary": "Approve displayed recipient and verification code", "security": [{"deviceBearer": []}], "x-required-role": "writer", "requestBody": {"required": true, "content": {"application/json": {"schema": {"type": "object", "required": ["claimId"], "properties": {"claimId": {"type": "string"}}}}}}, "responses": {"200": {"description": "Approved"}}}
+    },
+    "/v1/alert-token": {
+      "put": {
+        "operationId": "registerAlertToken", "summary": "Register/rotate the own device token for balance/budget alert pushes",
+        "security": [{"deviceBearer": []}], "x-required-role": "viewer",
+        "requestBody": {"required": true, "content": {"application/json": {"schema": {"type": "object", "additionalProperties": false, "required": ["token", "environment"], "properties": {"token": {"type": "string", "maxLength": 512}, "environment": {"type": "string", "enum": ["sandbox", "production"]}}}}}},
+        "responses": {"200": {"description": "Success", "content": {"application/json": {"schema": {"type": "object", "additionalProperties": false, "required": ["ok"], "properties": {"ok": {"type": "boolean"}}}}}}, "400": {"description": "Invalid request"}, "401": {"description": "Invalid credential"}, "403": {"description": "Role or tenant forbidden"}, "413": {"description": "Payload too large"}, "429": {"description": "Rate limited"}, "500": {"description": "Storage unavailable"}, "503": {"description": "Delivery secret unavailable"}
+        }
+      },
+      "delete": {
+        "operationId": "removeAlertToken", "summary": "Unregister the own device alert token",
+        "security": [{"deviceBearer": []}], "x-required-role": "viewer",
+        "responses": {"200": {"description": "Success", "content": {"application/json": {"schema": {"type": "object", "additionalProperties": false, "required": ["ok"], "properties": {"ok": {"type": "boolean"}}}}}}, "401": {"description": "Invalid credential"}, "403": {"description": "Role forbidden"}, "429": {"description": "Rate limited"}
+        }
+      }
+    },
+    "/v1/alert-settings": {
+      "put": {
+        "operationId": "setAlertSettings", "summary": "Enable/disable relaying balance/budget alerts to registered iPhones (writer-controlled switch)",
+        "security": [{"deviceBearer": []}], "x-required-role": "writer",
+        "requestBody": {"required": true, "content": {"application/json": {"schema": {"type": "object", "additionalProperties": false, "required": ["phoneAlertsEnabled"], "properties": {"phoneAlertsEnabled": {"type": "boolean"}}}}}},
+        "responses": {"200": {"description": "Success", "content": {"application/json": {"schema": {"type": "object", "additionalProperties": false, "required": ["ok"], "properties": {"ok": {"type": "boolean"}}}}}}, "400": {"description": "Invalid request"}, "401": {"description": "Invalid credential"}, "403": {"description": "Role forbidden"}, "413": {"description": "Payload too large"}, "429": {"description": "Rate limited"}, "500": {"description": "Storage unavailable"}
+        }
+      }
+    },
+    "/v1/alert-push": {
+      "post": {
+        "operationId": "pushBillingAlert", "summary": "Relay one balance/budget alert to consented registered iPhones",
+        "security": [{"deviceBearer": []}], "x-required-role": "writer",
+        "requestBody": {"required": true, "content": {"application/json": {"schema": {"type": "object", "additionalProperties": false, "required": ["alertId", "title", "body", "severity"], "properties": {"alertId": {"type": "string", "pattern": "^[A-Za-z0-9_-]{1,80}$"}, "title": {"type": "string", "maxLength": 120}, "body": {"type": "string", "maxLength": 400}, "severity": {"type": "string", "enum": ["info", "warning", "critical"]}}}}}},
+        "responses": {"200": {"description": "Relay outcome; deduplicated true when alertId already relayed", "content": {"application/json": {"schema": {"type": "object", "additionalProperties": false, "required": ["ok"], "properties": {"ok": {"type": "boolean"}, "deduplicated": {"type": "boolean"}, "accepted": {"type": "integer"}, "failed": {"type": "integer"}}}}}}, "400": {"description": "Invalid request"}, "401": {"description": "Invalid credential"}, "403": {"description": "Relay disabled or role forbidden"}, "413": {"description": "Payload too large"}, "429": {"description": "Rate limited"}
+        }
+      }
+    },
+    "/v1/shares/{shareId}/projection": {
+      "parameters": [{"name": "shareId", "in": "path", "required": true, "schema": {"type": "string"}}],
+      "put": {"operationId": "publishQuotaShareProjection", "summary": "Writer publishes minimal plaintext windows for the selected instance", "security": [{"deviceBearer": []}], "x-required-role": "writer", "requestBody": {"required": true, "content": {"application/json": {"schema": {"type": "object", "required": ["capturedAt", "windows"], "properties": {"capturedAt": {"type": "string", "format": "date-time"}, "windows": {"type": "array", "maxItems": 80, "items": {"$ref": "#/components/schemas/ShareWindow"}}}}}}}, "responses": {"200": {"description": "Accepted"}}},
+      "get": {"operationId": "getQuotaShareProjection", "summary": "Read only this approved, unrevoked instance projection", "security": [{"shareViewerBearer": []}], "responses": {"200": {"description": "One instance's quota windows", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ShareProjection"}}}}}}
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "deviceBearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "High entropy per-device token; roles and tenant bindings enforced server-side."
+      },
+      "pairingBearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "Short-lived pairing proof/claim capability, never a quota write token."
+      },
+      "bootstrapToken": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-Bootstrap-Token",
+        "description": "Explicitly enabled one-time bootstrap only."
+      },
+      "shareInviteBearer": {"type": "http", "scheme": "bearer", "description": "Short-lived single-claim invitation secret."},
+      "shareClaimBearer": {"type": "http", "scheme": "bearer", "description": "Claim result capability; cannot read a projection."},
+      "shareViewerBearer": {"type": "http", "scheme": "bearer", "description": "One recipient's one-share read grant, revoked by writer."}
+    },
+    "schemas": {
+      "UsageEnvelope": { "$ref": "./usage-envelope.schema.json" },
+      "ShareRecord": {
+        "type": "object", "additionalProperties": false,
+        "required": ["shareId", "connectionId", "providerId", "accountId", "label", "state", "recipientName", "claimId", "verificationCode", "expiresAt"],
+        "properties": {
+          "shareId": {"type": "string"}, "connectionId": {"type": "string"}, "providerId": {"type": "string"}, "accountId": {"type": "string"},
+          "label": {"type": "string"}, "state": {"type": "string"}, "recipientName": {"type": ["string", "null"]},
+          "claimId": {"type": ["string", "null"]}, "verificationCode": {"type": ["string", "null"]}, "expiresAt": {"type": "string", "format": "date-time"}
+        }
+      },
+      "ShareWindow": {
+        "type": "object", "additionalProperties": false,
+        "required": ["quotaKey", "unit", "currency", "availability", "remainingBps", "amount", "limit", "quality", "fetchOutcome", "observedAt", "staleAt", "resetsAt"],
+        "properties": {
+          "quotaKey": {"type": "string"}, "unit": {"enum": ["percent", "tokens", "requests", "credits", "money"]},
+          "currency": {"type": ["string", "null"]}, "availability": {"enum": ["available", "unavailable", "unlimited"]},
+          "remainingBps": {"type": ["integer", "null"], "minimum": 0, "maximum": 10000},
+          "amount": {"type": ["string", "null"]}, "limit": {"type": ["string", "null"]},
+          "quality": {"enum": ["reported", "estimated", "unknown"]},
+          "fetchOutcome": {"enum": ["ok", "error", "throttled", "disabled", "auth_required"]},
+          "observedAt": {"type": ["string", "null"], "format": "date-time"},
+          "staleAt": {"type": ["string", "null"], "format": "date-time"},
+          "resetsAt": {"type": ["string", "null"], "format": "date-time"}
+        }
+      },
+      "ShareProjection": {
+        "type": "object", "additionalProperties": false,
+        "required": ["shareId", "providerId", "label", "capturedAt", "windows"],
+        "properties": {
+          "shareId": {"type": "string"}, "providerId": {"type": "string"}, "label": {"type": "string"},
+          "capturedAt": {"type": "string", "format": "date-time"},
+          "windows": {"type": "array", "maxItems": 80, "items": {"$ref": "#/components/schemas/ShareWindow"}}
+        }
+      },
+      "Envelope": {
+        "$ref": "./envelope.schema.json"
+      },
+      "Problem": {
+        "type": "object",
+        "required": [
+          "type",
+          "title",
+          "status",
+          "code"
+        ],
+        "properties": {
+          "type": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "status": {
+            "type": "integer"
+          },
+          "code": {
+            "type": "string"
+          },
+          "retryAfter": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        }
+      },
+      "Receipt": {
+        "type": "object",
+        "required": [
+          "serverRevision",
+          "sourceSequence",
+          "receivedAt",
+          "serverTime",
+          "contentHash"
+        ],
+        "properties": {
+          "serverRevision": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "sourceSequence": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "receivedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "serverTime": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "contentHash": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

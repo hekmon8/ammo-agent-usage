@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://quota-island.example/schemas/query-output/1.0.0",
+  "title": "Ammo read-only query projection v1",
+  "type": "object",
+  "required": ["schemaVersion", "scope"],
+  "properties": {
+    "schemaVersion": {"const": "1.0.0"},
+    "scope": {"enum": ["latest_snapshot", "bounded_snapshot_history"]},
+    "capturedAt": {"type": "string"},
+    "id": {"type": "string"},
+    "providerId": {"type": "string"},
+    "quotaKey": {"type": "string"},
+    "availability": {"enum": ["available", "unavailable", "unlimited"]},
+    "quality": {"enum": ["reported", "estimated", "unknown"]},
+    "observedAt": {"type": ["string", "null"]},
+    "staleAt": {"type": ["string", "null"]},
+    "freshness": {"enum": ["fresh", "low", "exhausted", "stale", "resetPending", "unavailable", "unlimited", "authRequired", "clockSkew"]}
+  },
+  "additionalProperties": true
+}

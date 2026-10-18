@@ -1,0 +1,21 @@
+"resetReminder.toggle" = "Quota reset reminders on this device";
+"resetReminder.lead" = "Remind before reset";
+"resetReminder.minutes" = "%d minutes";
+"resetReminder.off" = "Reset reminders are off.";
+"resetReminder.waiting" = "Waiting for a fresh quota observation.";
+"resetReminder.denied" = "Allow notifications in system settings to use reset reminders.";
+"resetReminder.unavailable" = "The reminder could not be scheduled. Try refreshing.";
+"resetReminder.storageError" = "Reminder state could not be saved. Reminders are off until storage is repaired.";
+"resetReminder.retained" = "Offline or stale: keeping previously scheduled forecasts; no new reminders added.";
+"resetReminder.clockUncertain" = "Device time is uncertain; new reminders are paused. Check system time. After a backward clock change, scheduling waits until time catches up with the last evaluated time; refreshing alone does not clear this limit.";
+"resetReminder.suppressed" = "Some cycles were already handled or their delivery or cancellation is uncertain. They will not repeat before reset.";
+"resetReminder.scheduled" = "%d reset forecasts scheduled or already handled in this cycle.";
+"resetReminder.capped" = "Reminder capacity reached. %d forecasts retained; up to 48 can be pending on this device.";
+"resetReminder.footer" = "Off by default. Uses this device’s notifications, independently of Cloudflare alerts. Reminders use the last verified reset forecast and may change when quotas refresh. Timing changes need cancellation confirmed before the old reminder time; otherwise that cycle stays suppressed until reset. System settings, Focus and sleep can affect delivery.";
+"resetReminder.notification.title" = "%@ quota reset forecast";
+"resetReminder.notification.body" = "%@ · %@ is expected to reset at %@. Refresh Ammo to confirm.";
+
+"resetReminder.toggle.mac" = "Mac reset reminders";
+"resetReminder.toggle.phone" = "iPhone reset reminders";
+"resetReminder.deviceScope" = "Controls this device only. Set each device separately.";
+"resetReminder.details" = "Reminder details";

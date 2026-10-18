@@ -1,0 +1,10 @@
+{
+  "name": "quota-island-contract-checks",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "test:contracts": "python3 scripts/prepare_ts_fixtures.py && tsc --strict --noEmit --target ES2022 --module ES2022 contracts/Contracts.ts .build/fixtures.generated.ts",
+    "testflight:ios": "node scripts/testflight-ios.mjs"
+  },
+  "devDependencies": { "typescript": "5.9.3" }
+}

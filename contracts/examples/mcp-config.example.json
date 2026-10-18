@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "quota-island": {
+      "command": "/ABSOLUTE/PATH/TO/qi",
+      "args": [
+        "mcp",
+        "serve",
+        "--stdio"
+      ]
+    }
+  }
+}

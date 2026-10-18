@@ -1,0 +1,46 @@
+{
+  "schemaVersion": "1.0.0",
+  "sourceDeviceId": "mac_usage_demo",
+  "sourceEpoch": "epoch_usage_demo",
+  "sourceSequence": 42,
+  "capturedAt": "2026-10-02T05:00:00Z",
+  "timeZoneIdentifier": "Etc/UTC",
+  "retainedFromDay": "2026-09-01",
+  "sources": [
+    {
+      "agent": "claude_code",
+      "status": "available",
+      "scannedAt": "2026-10-02T05:00:00Z",
+      "latestEventAt": "2026-10-02T04:59:00Z"
+    },
+    {
+      "agent": "codex",
+      "status": "partial",
+      "scannedAt": "2026-10-02T05:00:00Z",
+      "latestEventAt": "2026-10-02T04:58:00Z",
+      "diagnostic": "partial_coverage"
+    }
+  ],
+  "buckets": [
+    {
+      "day": "2026-10-01",
+      "agent": "claude_code",
+      "tokens": {
+        "nonCachedInput": 1000,
+        "cacheRead": 500,
+        "cacheWrite": 100,
+        "output": 200
+      }
+    },
+    {
+      "day": "2026-10-02",
+      "agent": "codex",
+      "tokens": {
+        "nonCachedInput": 800,
+        "cacheRead": 200,
+        "cacheWrite": 0,
+        "output": 300
+      }
+    }
+  ]
+}

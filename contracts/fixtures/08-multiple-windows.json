@@ -1,0 +1,122 @@
+{
+  "schemaVersion": "1.0.0",
+  "snapshotId": "snapshot_demo_42",
+  "sourceDeviceId": "mac_demo",
+  "sourceEpoch": "epoch_demo",
+  "sourceSequence": 42,
+  "capturedAt": "2026-09-05T01:41:00Z",
+  "windows": [
+    {
+      "id": "codex-primary",
+      "providerId": "codex",
+      "accountId": "account_demo",
+      "accountAlias": "个人账户",
+      "quotaKey": "primary",
+      "sharedPoolId": null,
+      "unit": "percent",
+      "currency": null,
+      "availability": "available",
+      "remainingBps": 6800,
+      "amount": null,
+      "limit": null,
+      "quality": "reported",
+      "sourceMethod": "local_rpc",
+      "fetchOutcome": "ok",
+      "observedAt": "2026-09-05T01:41:00Z",
+      "staleAt": "2026-09-05T01:51:00Z",
+      "window": {
+        "kind": "fixed",
+        "durationSeconds": 18000,
+        "startsAt": "2026-09-04T23:30:00Z",
+        "resetsAt": "2026-09-05T04:30:00Z",
+        "periodId": "demo_period_01"
+      },
+      "history": [
+        {
+          "observedAt": "2026-09-05T01:16:00Z",
+          "remainingBps": 9000,
+          "segmentId": "seg_01"
+        },
+        {
+          "observedAt": "2026-09-05T01:21:00Z",
+          "remainingBps": 8600,
+          "segmentId": "seg_01"
+        },
+        {
+          "observedAt": "2026-09-05T01:26:00Z",
+          "remainingBps": 8200,
+          "segmentId": "seg_01"
+        },
+        {
+          "observedAt": "2026-09-05T01:31:00Z",
+          "remainingBps": 8000,
+          "segmentId": "seg_01"
+        },
+        {
+          "observedAt": "2026-09-05T01:36:00Z",
+          "remainingBps": 7400,
+          "segmentId": "seg_01"
+        },
+        {
+          "observedAt": "2026-09-05T01:41:00Z",
+          "remainingBps": 6800,
+          "segmentId": "seg_01"
+        }
+      ]
+    },
+    {
+      "id": "codex-weekly",
+      "providerId": "codex",
+      "accountId": "account_demo",
+      "accountAlias": "个人账户",
+      "quotaKey": "secondary",
+      "sharedPoolId": null,
+      "unit": "percent",
+      "currency": null,
+      "availability": "available",
+      "remainingBps": 4200,
+      "amount": null,
+      "limit": null,
+      "quality": "reported",
+      "sourceMethod": "local_rpc",
+      "fetchOutcome": "ok",
+      "observedAt": "2026-09-05T01:41:00Z",
+      "staleAt": "2026-09-05T01:51:00Z",
+      "window": {
+        "kind": "fixed",
+        "durationSeconds": 604800,
+        "startsAt": "2026-09-01T00:00:00Z",
+        "resetsAt": "2026-09-08T00:00:00Z",
+        "periodId": "demo_week_01"
+      },
+      "history": []
+    },
+    {
+      "id": "claude-primary",
+      "providerId": "claude",
+      "accountId": "claude_demo",
+      "accountAlias": "个人账户",
+      "quotaKey": "primary",
+      "sharedPoolId": null,
+      "unit": "percent",
+      "currency": null,
+      "availability": "available",
+      "remainingBps": 2400,
+      "amount": null,
+      "limit": null,
+      "quality": "reported",
+      "sourceMethod": "community_endpoint",
+      "fetchOutcome": "ok",
+      "observedAt": "2026-09-05T01:41:00Z",
+      "staleAt": "2026-09-05T01:51:00Z",
+      "window": {
+        "kind": "fixed",
+        "durationSeconds": 18000,
+        "startsAt": "2026-09-04T23:30:00Z",
+        "resetsAt": "2026-09-05T04:30:00Z",
+        "periodId": "demo_period_01"
+      },
+      "history": []
+    }
+  ]
+}

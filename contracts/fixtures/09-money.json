@@ -1,0 +1,37 @@
+{
+  "schemaVersion": "1.0.0",
+  "snapshotId": "snapshot_demo_42",
+  "sourceDeviceId": "mac_demo",
+  "sourceEpoch": "epoch_demo",
+  "sourceSequence": 42,
+  "capturedAt": "2026-09-05T01:41:00Z",
+  "windows": [
+    {
+      "id": "custom-credit",
+      "providerId": "custom",
+      "accountId": "account_demo",
+      "accountAlias": "个人账户",
+      "quotaKey": "wallet",
+      "sharedPoolId": null,
+      "unit": "money",
+      "currency": "USD",
+      "availability": "available",
+      "remainingBps": null,
+      "amount": "42.60",
+      "limit": null,
+      "quality": "reported",
+      "sourceMethod": "user_defined",
+      "fetchOutcome": "ok",
+      "observedAt": "2026-09-05T01:41:00Z",
+      "staleAt": "2026-09-05T01:51:00Z",
+      "window": {
+        "kind": "unknown",
+        "durationSeconds": null,
+        "startsAt": null,
+        "resetsAt": null,
+        "periodId": null
+      },
+      "history": []
+    }
+  ]
+}

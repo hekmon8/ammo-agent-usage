@@ -1,0 +1,4 @@
+/* System permission dialogs; the plist values are the zh-Hans development
+   defaults and these overrides localize them for each language. */
+"NSCameraUsageDescription" = "扫描二维码以绑定设备或接收共享额度。";
+"NSPhotoLibraryAddUsageDescription" = "将你选择的 Token 用量小票保存到照片。";

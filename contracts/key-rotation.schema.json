@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://quota-island.example/schemas/key-rotation/1.0.0",
+  "title": "Explicit source-key rotation request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["userConfirmation", "oldSourceEpoch", "newSourceEpoch", "newSourcePublicKey", "keyId", "wraps", "signature", "trustSignature"],
+  "properties": {
+    "userConfirmation": {"const": "rotate_source_key"},
+    "oldSourceEpoch": {"type": "string", "pattern": "^[A-Za-z0-9_-]{1,80}$"},
+    "newSourceEpoch": {"type": "string", "pattern": "^[A-Za-z0-9_-]{1,80}$"},
+    "newSourcePublicKey": {"type": "string", "pattern": "^[A-Za-z0-9_-]{43}$"},
+    "keyId": {"type": "string", "pattern": "^[A-Za-z0-9_-]{1,80}$"},
+    "wraps": {
+      "type": "array", "maxItems": 32,
+      "items": {"type": "object", "additionalProperties": false, "required": ["deviceId", "wrappedSnapshotKey"], "properties": {"deviceId": {"type": "string", "pattern": "^[A-Za-z0-9_-]{1,80}$"}, "wrappedSnapshotKey": {"type": "string", "pattern": "^[A-Za-z0-9_-]+$", "maxLength": 4096}}}
+    },
+    "signature": {"type": "string", "pattern": "^[A-Za-z0-9_-]{86}$"},
+    "trustSignature": {"type": "string", "pattern": "^[A-Za-z0-9_-]{86}$"}
+  },
+  "description": "The old pinned Ed25519 key signs UTF-8 QI-ROTATE|1|workspaceId|sourceDeviceId|oldSourceEpoch|newSourceEpoch|newSourcePublicKey|keyId, LF, then wraps sorted by deviceId as deviceId|wrappedSnapshotKey|LF. trustSignature separately signs UTF-8 QI-ROTATION-TRUST|1|workspaceId|sourceDeviceId|oldSourceEpoch|newSourceEpoch|newSourcePublicKey|keyId with no LF. Each wrap's own QI-WRAP context is workspaceId|sourceDeviceId|newSourceEpoch|keyId|deviceId."
+}

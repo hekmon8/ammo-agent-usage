@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Ammo signed HPKE snapshot key wrap v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "suite", "context", "encapsulatedKey", "ciphertext", "signature"],
+  "properties": {
+    "version": {"const": 1},
+    "suite": {"const": "X25519-HKDF-SHA256-AES256GCM"},
+    "context": {"type": "string", "pattern": "^[A-Za-z0-9_-]{1,80}([|][A-Za-z0-9_-]{1,80}){4}$"},
+    "encapsulatedKey": {"type": "string", "pattern": "^[A-Za-z0-9_-]{43}$"},
+    "ciphertext": {"type": "string", "pattern": "^[A-Za-z0-9_-]{64}$"},
+    "signature": {"type": "string", "pattern": "^[A-Za-z0-9_-]{86}$"}
+  }
+}

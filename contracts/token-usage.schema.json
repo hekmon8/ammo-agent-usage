@@ -1,0 +1,152 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://quota-island.example/schemas/token-usage/1.0.0",
+  "title": "Single-source cumulative token usage aggregate",
+  "description": "Maximum encoded plaintext 131072 bytes. Additional runtime rules: valid IANA timezone; unique agent sources and (day,agent) buckets; buckets at/after retainedFromDay and only for available/partial sources. Replace the whole aggregate, never sum multiple Mac snapshots.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "sourceDeviceId",
+    "sourceEpoch",
+    "sourceSequence",
+    "capturedAt",
+    "timeZoneIdentifier",
+    "retainedFromDay",
+    "sources",
+    "buckets"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "1.0.0"
+    },
+    "sourceDeviceId": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{1,80}$"
+    },
+    "sourceEpoch": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{1,80}$"
+    },
+    "sourceSequence": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991
+    },
+    "capturedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "timeZoneIdentifier": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "retainedFromDay": {
+      "type": "string",
+      "format": "date",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+    },
+    "sources": {
+      "type": "array",
+      "maxItems": 2,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "agent",
+          "status"
+        ],
+        "properties": {
+          "agent": {
+            "type": "string",
+            "enum": [
+              "claude_code",
+              "codex"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "available",
+              "partial",
+              "unavailable",
+              "disabled"
+            ]
+          },
+          "scannedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "latestEventAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "diagnostic": {
+            "type": "string",
+            "pattern": "^[a-z_]{1,80}$"
+          }
+        }
+      }
+    },
+    "buckets": {
+      "type": "array",
+      "maxItems": 800,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "day",
+          "agent",
+          "tokens"
+        ],
+        "properties": {
+          "day": {
+            "type": "string",
+            "format": "date",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+          },
+          "agent": {
+            "type": "string",
+            "enum": [
+              "claude_code",
+              "codex"
+            ]
+          },
+          "tokens": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "nonCachedInput",
+              "cacheRead",
+              "cacheWrite",
+              "output"
+            ],
+            "properties": {
+              "nonCachedInput": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 2251799813685247
+              },
+              "cacheRead": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 2251799813685247
+              },
+              "cacheWrite": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 2251799813685247
+              },
+              "output": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 2251799813685247
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
