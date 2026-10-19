@@ -32,9 +32,10 @@ simulator launch without a paired Mac.
 - **macOS:** download `Ammo-macOS-unsigned` from a successful
   [GitHub Actions run](https://github.com/hekmon8/ammo-agent-usage/actions/workflows/checks.yml),
   or build locally. CI artifacts are unsigned development builds, not a signed release.
-- **iPhone / TestFlight:** the current workflow distributes to an existing internal
-  tester group. Join with your Ammo invitation; no public Ammo invite URL is
-  configured in this repository. See [TestFlight setup](docs/github-actions.md).
+- **iPhone:** [join the Ammo TestFlight beta](https://testflight.apple.com/join/hzWVf8WM).
+  Open the invite on your iPhone and follow TestFlight's installation steps.
+  Availability depends on the current beta and available tester slots.
+  Maintainers can find the internal build workflow in [TestFlight setup](docs/github-actions.md).
 - `Ammo-iOS-Simulator` is a simulator artifact; it cannot be installed on a physical iPhone.
 
 ## Build locally

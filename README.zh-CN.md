@@ -31,8 +31,9 @@ Ammo 是一款 macOS AI 额度监控工具，提供可选的 iPhone 伴侣应用
 - **macOS：** 在成功的 [GitHub Actions 构建](https://github.com/hekmon8/ammo-agent-usage/actions/workflows/checks.yml)
   中下载 `Ammo-macOS-unsigned`，或按下方步骤自行编译。
   CI 产物是未签名的开发构建，不是已签名的正式发行版。
-- **iPhone / TestFlight：** 当前工作流面向已有内部测试组分发，请使用收到的 Ammo
-  邀请加入；仓库尚未配置公开邀请链接。配置步骤见 [TestFlight 文档](docs/github-actions.md)。
+- **iPhone：** [加入 Ammo TestFlight 测试](https://testflight.apple.com/join/hzWVf8WM)。
+  在 iPhone 上打开邀请，按 TestFlight 提示安装；能否加入取决于当前测试状态和剩余名额。
+  维护者可参阅 [TestFlight 构建与分发文档](docs/github-actions.md)。
 - `Ammo-iOS-Simulator` 只用于模拟器，不能直接安装到实体 iPhone。
 
 ## 本地构建
