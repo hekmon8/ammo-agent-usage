@@ -998,19 +998,3 @@ private extension StudioHeader where Trailing == EmptyView {
         self.init(eyebrow: eyebrow, title: title, detail: detail) { EmptyView() }
     }
 }
-
-private struct StudioMetric: View {
-    let value: String
-    let label: String
-
-    var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 6) {
-            Text(value)
-                .font(.system(.title2, design: .rounded, weight: .semibold))
-                .monospacedDigit()
-            Text(label)
-                .studioType(.caption)
-                .foregroundStyle(.secondary)
-        }
-    }
-}

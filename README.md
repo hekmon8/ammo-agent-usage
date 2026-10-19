@@ -56,7 +56,7 @@ See [setup and limitations](docs/17-platform-billing.md).
 
 - [Self-hosted Worker](workers/lite/README.md): encrypted snapshot sync, pairing,
   explicit quota sharing and optional APNs. No deployment runs during tests.
-- [CLI](executables/qi/README.md) and [MCP](executables/qi-mcp/README.md): read local
+- [CLI and MCP](apps/cli/README.md): read local
   snapshots; remote HTTP MCP is a separate opt-in with a revocable read token.
 - iCloud uses your signed app's private CloudKit container. Background refresh
   and Live Activity presentation are scheduled by iOS, not guaranteed intervals.
