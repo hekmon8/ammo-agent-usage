@@ -171,24 +171,6 @@ private struct MCPCopyButton: View {
     }
 }
 
-struct IslandProvidersCard: View {
-    @ObservedObject var model: MacModel
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text(L("settings.island.providersTitle")).studioType(.section)
-            Text(L("settings.island.providersHelp"))
-                .studioType(.caption).foregroundStyle(.secondary)
-            ForEach(model.availableIslandProviders, id: \.self) { id in
-                Toggle(ProviderCatalog.identity(for: id).displayName, isOn: Binding(
-                    get: { model.islandProviders.includes(id) }, set: { model.setIslandProvider(id, visible: $0) }))
-            }
-            if model.availableIslandProviders.isEmpty { Text(L("settings.island.emptyHint")).studioType(.caption) }
-            Button(L("settings.island.showAll")) { model.showAllIslandProviders() }
-        }.padding(18).studioSurface(radius: 11).studioType(.body).buttonStyle(StudioRaisedButtonStyle())
-    }
-}
-
-
 struct IslandAppearanceCard: View {
     @AppStorage(QuotaAppearanceKeys.displayStyle) private var style = QuotaDisplayStyle.calibrated.rawValue
     @AppStorage(QuotaAppearanceKeys.edgeMotion) private var edgeMotion = true

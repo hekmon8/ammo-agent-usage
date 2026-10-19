@@ -11,11 +11,11 @@ ROOT_FILES = {'.gitignore', '.gitleaks.toml', 'README.md', 'LICENSE', 'NOTICE', 
               'SECURITY.md', 'PRIVACY.md', 'THIRD_PARTY_NOTICES.md', 'SOURCE.md',
               'Package.swift', 'Package.resolved', 'package.json', 'package-lock.json',
               'project.yml', 'toolchain.json'}
-TREES = {'apps', 'native', 'extensions', 'contracts', 'tests', 'third_party', 'executables'}
+TREES = {'apps', 'native', 'extensions', 'contracts', 'tests', 'third_party'}
 SCRIPTS = {'check_apple.sh', 'check_cli_mcp.py', 'check_l10n.py', 'configure-apns.sh',
            'configure_apns.py', 'prepare_ts_fixtures.py', 'release_preflight.py',
            'requirements.txt', 'requirements.lock.txt', 'test_contracts.py',
-           'testflight-ios.mjs', 'testflight-artifact.mjs', 'export_public.py', 'verify_swift.swift'}
+           'testflight-ios.mjs', 'testflight-artifact.mjs', 'export_public.py'}
 
 def allowed(name):
     p = PurePosixPath(name)

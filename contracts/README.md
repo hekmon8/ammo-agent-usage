@@ -8,18 +8,17 @@ AES-GCM签名测试向量使用固定公开测试key/nonce，专为重现而设�
 
 OpenAPI中的x-required-role只描述授权规则，框架不会自动执行它；开发者必须实现设备/tenant/writer/epoch检查。GET pairing result是有限次数的受权秘密交付，应采用明确ack再消费的协议：approved可向同一claim能力幂等交付，客户端收到并存储后确认consumed；不得因网络丢包永久丢失token。当前OpenAPI提供result与ack两个操作。
 
-Swift/TypeScript文件为可编译的DTO/接口边界示例，不含真实Provider、App、Worker服务实现。MCP样例路径需替换。首次真机集成前以实际Provider响应补充脱敏golden fixtures。
+Swift 模型以 packages/QuotaCore/Sources/QuotaCore 为唯一实现；Contracts.ts 是 TypeScript 接口边界。MCP 样例路径需替换。首次真机集成前以实际 Provider 响应补充脱敏 golden fixtures。
 
 
 ## DTO 验证命令
 
 ```bash
-swiftc contracts/Contracts.swift scripts/verify_swift.swift -o /tmp/qi-verify-swift
-/tmp/qi-verify-swift contracts/fixtures
-tsc --strict --noEmit --target ES2022 --module ES2022 contracts/Contracts.ts
+swift test --disable-sandbox --filter QuotaCoreTests.testAllGoldenRoundTripsAndSchemaCopy
+npm run test:contracts
 ```
 
-Swift 示例显式保留 JSON null，不使用 encodeIfPresent 丢掉必填空字段。上述 Swift 验证在 Linux 工具链运行，只验证 Foundation DTO 序列化，不验证 AppKit、SwiftUI、WidgetKit 或 ActivityKit。
+Swift 模型显式保留 JSON null，不使用 encodeIfPresent 丢掉必填空字段。上述测试通过实际 SnapshotCodec 验证全部 12 份快照的严格解码、编码等价和 schema 副本一致性。完整原生构建使用 scripts/check_apple.sh。
 
 密钥封装采用下方 CryptoKit HPKE 配置；Worker 的 D1 授权、并发写入和重试实现位于 workers/lite/src，HTTP 集成测试使用临时本地数据库。顺序契约测试不能替代并发边界测试。
 

@@ -270,11 +270,7 @@ final class MacModel: ObservableObject {
         UserDefaults.standard.set(islandProviders.selected.map { Array($0).sorted() }, forKey: IslandProviderSelection.preferenceKey)
         onChange?()
     }
-    func showAllIslandProviders() {
-        islandProviders = IslandProviderSelection(stored: nil)
-        UserDefaults.standard.removeObject(forKey: IslandProviderSelection.preferenceKey)
-        onChange?()
-    }
+
     func setICloudEnabled(_ enabled: Bool) {
         iCloudEnabled = enabled
         if !enabled { pendingICloudSnapshot = nil; iCloudUpload?.cancel() }
