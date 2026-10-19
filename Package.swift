@@ -31,7 +31,7 @@ let package = Package(
         .target(name: "QuotaMCP", dependencies: ["QuotaQuery", .product(name: "MCP", package: "swift-sdk")], path: "packages/QuotaQuery/Sources/QuotaMCP"),
         .executableTarget(name: "qi", dependencies: ["QuotaQuery", "QuotaMCP", "QuotaCore", "QuotaStore", "QuotaIPC"], path: "apps/cli/qi"),
         .executableTarget(name: "qi-mcp", dependencies: ["QuotaQuery", "QuotaMCP", "QuotaCore", "QuotaStore"], path: "apps/cli/qi-mcp"),
-        .testTarget(name: "QuotaQueryTests", dependencies: ["QuotaQuery", "QuotaCore", "QuotaStore"], path: "tests/cli"),
+        .testTarget(name: "QuotaQueryTests", dependencies: ["qi", "QuotaQuery", "QuotaCore", "QuotaStore"], path: "tests/cli"),
         .target(name: "QuotaIPC", dependencies: ["QuotaStore"], path: "packages/QuotaIPC/Sources/QuotaIPC"),
         .target(name: "QuotaSync", dependencies: ["QuotaCore", "QuotaStore"], path: "packages/QuotaSync/Sources/QuotaSync"),
         .testTarget(name: "QuotaSyncTests", dependencies: ["QuotaCore", "QuotaSync", "QuotaStore"], path: "tests/sync"),

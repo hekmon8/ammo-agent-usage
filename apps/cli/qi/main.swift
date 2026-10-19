@@ -60,7 +60,7 @@ struct QiCommand {
 
 private struct RefreshResult: Codable { let schemaVersion, result: String }
 
-private struct Command {
+struct Command {
     enum Action { case status, list(String?, Bool), get(String), history(String, TimeInterval), doctor, refresh(String?, TimeInterval), mcp }
     let directory: URL
     let requireFresh: Bool
@@ -135,4 +135,4 @@ private struct Command {
     }
 }
 
-private struct CommandError: Error, CustomStringConvertible { let description: String; let exitCode: Int32; init(_ description: String, _ exitCode: Int32) { self.description = description; self.exitCode = exitCode } }
+struct CommandError: Error, CustomStringConvertible { let description: String; let exitCode: Int32; init(_ description: String, _ exitCode: Int32) { self.description = description; self.exitCode = exitCode } }
