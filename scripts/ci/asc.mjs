@@ -3,6 +3,7 @@
 // key creation, tester invitations, external beta review, or App Store writes.
 import {sign} from 'node:crypto';
 import {readFileSync} from 'node:fs';
+import {resolve} from 'node:path';
 import {spawnSync} from 'node:child_process';
 import {pathToFileURL} from 'node:url';
 
@@ -54,6 +55,24 @@ export async function builds(appID, version, buildNumber, request = api) {
   return result;
 }
 
+export async function assertBuildUnused(appID, version, buildNumber, request = api) {
+  if ((await builds(appID, version, buildNumber, request)).length) {
+    throw new Error('Build already exists: inspect Apple state, do not upload a duplicate.');
+  }
+  const uploads = await list(`/v1/apps/${encodeURIComponent(appID)}/buildUploads?` + new URLSearchParams({
+    'filter[cfBundleShortVersionString]': version,
+    'filter[cfBundleVersion]': String(buildNumber), 'filter[platform]': 'IOS',
+    'fields[buildUploads]': 'cfBundleShortVersionString,cfBundleVersion,platform,state', limit: '200',
+  }), request);
+  if (uploads.some(item => item.attributes?.cfBundleShortVersionString !== version ||
+      item.attributes?.cfBundleVersion !== String(buildNumber) || item.attributes?.platform !== 'IOS')) {
+    throw new Error('ASC returned an unexpected upload identity; no upload performed.');
+  }
+  // Accepted uploads can exist before a processed build appears. Even FAILED or
+  // unknown upload states require inspection; never infer permission to retry.
+  if (uploads.length) throw new Error('Upload record already exists: inspect Apple state and use a new build number; no automatic upload retry.');
+}
+
 export async function internalGroup(appID, groupID, request = api) {
   if (!/^[a-zA-Z0-9-]+$/.test(groupID || '')) throw new Error('Set an existing ASC_INTERNAL_GROUP_ID.');
   const group = (await request(`/v1/betaGroups/${groupID}`)).data;
@@ -75,6 +94,11 @@ async function main(args) {
     console.log(JSON.stringify({data: await builds(flags['--app'], flags['--version'], flags['--build-number'])}));
   } else if (resource === 'builds' && operation === 'upload') {
     if (process.env.CI_UPLOAD_AUTHORIZED !== 'true') throw new Error('Upload requires the protected release workflow.');
+    const prepared = JSON.parse(readFileSync('.build/TestFlight/prepared.json', 'utf8'));
+    if (prepared.appID !== flags['--app'] || !flags['--ipa'] || resolve(prepared.ipa) !== resolve(flags['--ipa'])) {
+      throw new Error('Upload request differs from the prepared artifact.');
+    }
+    await assertBuildUnused(prepared.appID, prepared.version, prepared.buildNumber);
     const upload = spawnSync('xcrun', ['altool', '--upload-app', '--type', 'ios', '--file', flags['--ipa'],
       '--apiKey', process.env.ASC_KEY_ID, '--apiIssuer', process.env.ASC_ISSUER_ID, '--output-format', 'json'], {stdio: 'pipe', encoding: 'utf8', timeout: 900000});
     if (upload.status !== 0) throw new Error('Apple upload failed or timed out; inspect ASC before retrying. Output withheld to protect account details.');

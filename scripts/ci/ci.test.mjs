@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {exportOptions} from './signing-options.mjs';
-import {parseTag, protectsTag, successfulChecks} from './release-ref.mjs';
-import {builds, internalGroup, list} from './asc.mjs';
+import {parseTag, protectsTag, successfulChecks, verifyReleaseEnvironment} from './release-ref.mjs';
+import {assertBuildUnused, builds, internalGroup, list} from './asc.mjs';
 
 test('manual export uses exactly the app and widget profiles and retains internal-only', () => {
   const defaults = exportOptions('ABCDEFGHIJ', 'org.example.ammo', {});
@@ -27,9 +27,29 @@ test('release selector rejects ambiguous tags and build-number injection', () =>
 
 test('tag rules must actively restrict creation, update and deletion without exclusions', () => {
   const ruleset = {target: 'tag', enforcement: 'active', conditions: {ref_name: {include: ['refs/tags/testflight/ios/**'], exclude: []}}, rules: ['creation', 'update', 'deletion'].map(type => ({type}))};
-  assert.equal(protectsTag(ruleset, 'testflight/ios/v0.1.4-b11'), true);
+  assert.equal(protectsTag([ruleset], 'testflight/ios/v0.1.4-b11'), true);
   for (const patch of [{enforcement: 'disabled'}, {target: 'branch'}, {rules: [{type: 'deletion'}]}, {conditions: {ref_name: {include: ['~ALL'], exclude: ['refs/tags/testflight/**']}}}]) {
-    assert.equal(Boolean(protectsTag({...ruleset, ...patch}, 'testflight/ios/v0.1.4-b11')), false);
+    assert.equal(protectsTag([{...ruleset, ...patch}], 'testflight/ios/v0.1.4-b11'), false);
+  }
+  const creation = {...ruleset, rules: [{type: 'creation'}]};
+  const immutable = {...ruleset, rules: [{type: 'update'}, {type: 'deletion'}]};
+  assert.equal(protectsTag([creation, immutable], 'testflight/ios/v0.1.4-b11'), true);
+  assert.equal(protectsTag([creation, {...immutable, enforcement: 'disabled'}], 'testflight/ios/v0.1.4-b11'), false);
+  assert.equal(protectsTag([creation, {...immutable, conditions: {ref_name: {include: ['refs/tags/other/**']}}}], 'testflight/ios/v0.1.4-b11'), false);
+});
+
+test('release environment requires approval without admin bypass and only the default branch', () => {
+  const environment = {can_admins_bypass: false,
+    protection_rules: [{type: 'required_reviewers', reviewers: [{type: 'User', reviewer: {id: 1}}]}],
+    deployment_branch_policy: {custom_branch_policies: true, protected_branches: false}};
+  const allowed = [{name: 'main', type: 'branch'}];
+  assert.doesNotThrow(() => verifyReleaseEnvironment(environment, allowed, 'main'));
+  for (const value of [true, undefined, null]) {
+    assert.throws(() => verifyReleaseEnvironment({...environment, can_admins_bypass: value}, allowed, 'main'), /administrator bypass/);
+  }
+  assert.throws(() => verifyReleaseEnvironment({...environment, protection_rules: []}, allowed, 'main'), /reviewer/);
+  for (const branches of [[], [{name: 'main', type: 'tag'}], [{name: '*', type: 'branch'}], [...allowed, {name: 'feature', type: 'branch'}]]) {
+    assert.throws(() => verifyReleaseEnvironment(environment, branches, 'main'), /Only the exact default branch/);
   }
 });
 
@@ -74,6 +94,47 @@ test('group gate rejects external, empty and wrong-app groups without mutation',
   await assert.rejects(() => internalGroup('app1', 'group1', fixture(true, 'wrong')), /internal group/);
   await assert.rejects(() => internalGroup('app1', 'group1', fixture(true, 'app1', [])), /no tester/);
   await assert.rejects(() => internalGroup('app1', '../external', fixture()), /existing ASC_INTERNAL_GROUP_ID/);
+});
+
+test('upload gate refuses accepted uploads before a processed build exists, in every state', async () => {
+  for (const state of ['AWAITING_UPLOAD', 'PROCESSING', 'FAILED', 'COMPLETE', 'UNKNOWN']) {
+    const request = async (path, method) => {
+      assert.equal(method, undefined, 'upload readiness uses only reads');
+      const url = new URL(path, 'https://api.appstoreconnect.apple.com');
+      if (url.pathname === '/v1/preReleaseVersions') return {data: []};
+      assert.equal(url.pathname, '/v1/apps/app1/buildUploads');
+      assert.equal(url.searchParams.get('filter[platform]'), 'IOS');
+      assert.equal(url.searchParams.get('filter[cfBundleShortVersionString]'), '0.1.4');
+      assert.equal(url.searchParams.get('filter[cfBundleVersion]'), '16');
+      return {data: [{id: 'pending', attributes: {cfBundleShortVersionString: '0.1.4', cfBundleVersion: '16', platform: 'IOS', state: {state}}}]};
+    };
+    await assert.rejects(() => assertBuildUnused('app1', '0.1.4', '16', request), /Upload record already exists/);
+  }
+});
+
+test('upload gate requires complete empty processed-build and upload results', async () => {
+  await assertBuildUnused('app1', '0.1.4', '16', async () => ({data: []}));
+  await assert.rejects(() => assertBuildUnused('app1', '0.1.4', '16', async path => {
+    if (path.startsWith('/v1/preReleaseVersions')) return {data: []};
+    if (!path.includes('cursor=next')) return {data: [], links: {next: '/v1/apps/app1/buildUploads?cursor=next'}};
+    return {data: [{attributes: {cfBundleShortVersionString: '0.1.4', cfBundleVersion: '16', platform: 'IOS'}}]};
+  }), /Upload record already exists/);
+  await assert.rejects(() => assertBuildUnused('app1', '0.1.4', '16', async path => {
+    if (path.startsWith('/v1/preReleaseVersions')) return {data: []};
+    throw new Error('synthetic Apple API unavailable');
+  }), /API unavailable/);
+  await assert.rejects(() => assertBuildUnused('app1', '0.1.4', '16', async path => {
+    if (path.startsWith('/v1/preReleaseVersions')) return {data: []};
+    return {data: [{attributes: {cfBundleShortVersionString: '0.1.4', cfBundleVersion: '15', platform: 'IOS'}}]};
+  }), /unexpected upload identity/);
+});
+
+test('upload gate also refuses an existing processed build', async () => {
+  await assert.rejects(() => assertBuildUnused('app1', '0.1.4', '16', async path => {
+    if (path.startsWith('/v1/preReleaseVersions')) return {data: [{id: 'v', attributes: {version: '0.1.4', platform: 'IOS'}}]};
+    assert.ok(path.startsWith('/v1/builds'));
+    return {data: [{id: 'existing', attributes: {version: '16'}}]};
+  }), /Build already exists/);
 });
 
 test('paginated read fails closed on repeated next links', async () => {

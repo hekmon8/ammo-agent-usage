@@ -16,12 +16,25 @@ function matches(pattern, ref) {
   return pattern === ref || (pattern === 'refs/tags/testflight/ios/**' && ref.startsWith('refs/tags/testflight/ios/'));
 }
 
-export function protectsTag(ruleset, tag) {
-  const names = ruleset.conditions?.ref_name;
-  return ruleset.target === 'tag' && ruleset.enforcement === 'active' &&
-    names?.include?.some(pattern => matches(pattern, 'refs/tags/' + tag)) &&
-    !(names?.exclude?.length) &&
-    ['creation', 'update', 'deletion'].every(type => ruleset.rules?.some(rule => rule.type === type));
+export function protectsTag(rulesets, tag) {
+  const rules = rulesets.filter(ruleset => {
+    const names = ruleset.conditions?.ref_name;
+    return ruleset.target === 'tag' && ruleset.enforcement === 'active' &&
+      names?.include?.some(pattern => matches(pattern, 'refs/tags/' + tag)) && !names?.exclude?.length;
+  }).flatMap(ruleset => ruleset.rules ?? []);
+  // Creation can have a maintainer bypass while a separate immutable-tag rule
+  // has none. GitHub hides bypass actors from read-only tokens; setup must verify
+  // them with the owner rather than add an administrative token to the workflow.
+  return ['creation', 'update', 'deletion'].every(type => rules.some(rule => rule.type === type));
+}
+
+export function verifyReleaseEnvironment(environment, allowed, branch) {
+  const reviewers = environment.protection_rules?.find(rule => rule.type === 'required_reviewers');
+  if (!reviewers?.reviewers?.length) throw new Error('testflight-internal needs an existing required reviewer.');
+  if (environment.can_admins_bypass !== false) throw new Error('Disable administrator bypass for testflight-internal protection rules.');
+  const policy = environment.deployment_branch_policy;
+  if (!policy?.custom_branch_policies || policy.protected_branches) throw new Error('testflight-internal must allow only the default branch via a custom deployment policy.');
+  if (allowed?.length !== 1 || allowed[0].name !== branch || allowed[0].type !== 'branch') throw new Error('Only the exact default branch may deploy to testflight-internal; tags/other branches must be excluded.');
 }
 
 export function successfulChecks(run, jobs, commit, branch) {
@@ -54,20 +67,15 @@ export async function verifyReleaseRef() {
     throw new Error('Release must be explicitly dispatched from the protected default branch.');
   }
   const environment = await github(`/repos/${repository}/environments/testflight-internal`);
-  const reviewers = environment.protection_rules?.find(rule => rule.type === 'required_reviewers');
-  if (!reviewers?.reviewers?.length) throw new Error('testflight-internal needs an existing required reviewer.');
-  const policy = environment.deployment_branch_policy;
-  if (!policy?.custom_branch_policies || policy.protected_branches) throw new Error('testflight-internal must allow only the default branch via a custom deployment policy.');
   const allowed = (await github(`/repos/${repository}/environments/testflight-internal/deployment-branch-policies?per_page=100`)).branch_policies;
-  if (allowed?.length !== 1 || allowed[0].name !== branch || allowed[0].type !== 'branch') throw new Error('Only the exact default branch may deploy to testflight-internal; tags/other branches must be excluded.');
+  verifyReleaseEnvironment(environment, allowed, branch);
   const listed = await github(`/repos/${repository}/rulesets?includes_parents=true&per_page=100`);
   if (listed.length >= 100) throw new Error('Too many rulesets for a bounded release check.');
-  let protectedTag = false;
+  const tagRulesets = [];
   for (const item of listed.filter(item => item.target === 'tag' && item.enforcement === 'active')) {
-    const ruleset = await github(`/repos/${repository}/rulesets/${item.id}`);
-    if (protectsTag(ruleset, tag)) protectedTag = true;
+    tagRulesets.push(await github(`/repos/${repository}/rulesets/${item.id}`));
   }
-  if (!protectedTag) throw new Error('Tag needs active creation/update/deletion restrictions; see docs/github-actions.md.');
+  if (!protectsTag(tagRulesets, tag)) throw new Error('Tag needs active creation/update/deletion restrictions; see docs/github-actions.md.');
   git('fetch', '--no-tags', 'origin', `refs/heads/${branch}:refs/remotes/origin/${branch}`, `refs/tags/${tag}:refs/tags/${tag}`);
   if (git('cat-file', '-t', `refs/tags/${tag}`) !== 'tag') throw new Error('Release tag must be annotated.');
   const tagObject = git('rev-parse', `refs/tags/${tag}`);
