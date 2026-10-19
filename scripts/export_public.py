@@ -7,7 +7,7 @@ from pathlib import Path, PurePosixPath
 import subprocess
 
 ROOT = Path(__file__).resolve().parents[1]
-ROOT_FILES = {'.gitignore', '.gitleaks.toml', 'README.md', 'LICENSE', 'NOTICE', 'CONTRIBUTING.md',
+ROOT_FILES = {'.gitignore', '.gitleaks.toml', 'README.md', 'README.zh-CN.md', 'LICENSE', 'NOTICE', 'CONTRIBUTING.md',
               'SECURITY.md', 'PRIVACY.md', 'THIRD_PARTY_NOTICES.md', 'SOURCE.md',
               'Package.swift', 'Package.resolved', 'package.json', 'package-lock.json',
               'project.yml', 'toolchain.json'}
@@ -31,6 +31,8 @@ def allowed(name):
     if p.parts[0] == 'scripts':
         return (len(p.parts) == 2 and p.name in SCRIPTS) or (len(p.parts) >= 3 and p.parts[1] == 'ci')
     if p.parts[:2] == ('.github', 'workflows') and p.suffix in {'.yml', '.yaml'}: return True
+    if name in {'docs/images/macos-quotas.png', 'docs/images/macos-usage.png',
+                'docs/images/ios-first-launch.png'}: return True
     if name in {'Ammo.xcworkspace/contents.xcworkspacedata', 'config/Signing.xcconfig',
                 'docs/open-source-release.md', 'docs/05-provider-framework.md',
                 'docs/16-localization.md', 'docs/17-platform-billing.md', 'docs/18-token-usage.md',

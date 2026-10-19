@@ -10,8 +10,10 @@ separate acceptance criteria.
 2. Confirm the project license, third-party terms and ownership of shipped assets.
 3. Run `python3 scripts/export_public.py --output /absolute/new/directory`.
    The destination must not exist. Only allowlisted tracked files are copied;
-   no `.git`, internal QA, screenshots, videos, design boards, local signing files,
+   no `.git`, internal QA, private screenshots, videos, design boards, local signing files,
    reference test leftovers, build output or deployment receipts are copied.
+   The three curated UI images under `docs/images/` and both README languages
+   are explicitly included; they contain synthetic data or an unpaired first launch.
 4. Run Gitleaks against that directory and inspect `PUBLIC_MANIFEST.json`.
 5. In a clean environment install pinned dependencies and run the public checks.
 6. Initialize a new Git repository there; its first commit has no parent. Create

@@ -1,5 +1,7 @@
 # Ammo Agent Usage
 
+English | [简体中文](README.zh-CN.md)
+
 Ammo is a macOS quota monitor with an optional iPhone companion, widgets,
 Live Activities, CLI and MCP access. Each provider/account keeps its own quota
 windows, units, freshness and reset times. The Cloudflare Worker can be self-hosted.
@@ -7,6 +9,33 @@ windows, units, freshness and reset times. The Cloudflare Worker can be self-hos
 **Developer Preview:** source availability does not imply that every provider,
 physical device or background delivery scenario has been verified. See
 [release readiness](docs/open-source-release.md) and [privacy](PRIVACY.md).
+
+## Screenshots
+
+Native SwiftUI views rendered from public synthetic fixtures; the numbers are
+examples, not real account balances or billing. The iPhone capture is a fresh
+simulator launch without a paired Mac.
+
+| Quotas and spending | Recorded token usage |
+| --- | --- |
+| ![macOS quota overview with independent provider windows](docs/images/macos-quotas.png) | ![macOS recorded token usage, shown in Chinese](docs/images/macos-usage.png) |
+
+<details>
+<summary>iPhone companion — first launch</summary>
+
+<img src="docs/images/ios-first-launch.png" alt="iPhone first launch with instructions to connect a Mac" width="300">
+
+</details>
+
+## Try Ammo
+
+- **macOS:** download `Ammo-macOS-unsigned` from a successful
+  [GitHub Actions run](https://github.com/hekmon8/ammo-agent-usage/actions/workflows/checks.yml),
+  or build locally. CI artifacts are unsigned development builds, not a signed release.
+- **iPhone / TestFlight:** the current workflow distributes to an existing internal
+  tester group. Join with your Ammo invitation; no public Ammo invite URL is
+  configured in this repository. See [TestFlight setup](docs/github-actions.md).
+- `Ammo-iOS-Simulator` is a simulator artifact; it cannot be installed on a physical iPhone.
 
 ## Build locally
 
