@@ -9,9 +9,11 @@ Build them from the repository root with `swift build --disable-sandbox`.
 .build/debug/qi quota list --provider codex
 .build/debug/qi quota get --window codex-primary
 .build/debug/qi history --window codex-primary --range 24h
-.build/debug/qi doctor
+.build/debug/qi doctor --redact
 .build/debug/qi refresh --wait --timeout 10
 ```
+
+`doctor` requires `--redact` and returns a health summary of the public snapshot.
 
 `refresh` requests the running Mac collector through local IPC. Global options
 include `--data-dir <directory>` and `--require-fresh`. Exit codes distinguish
