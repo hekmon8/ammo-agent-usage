@@ -1,0 +1,18 @@
+{
+  "icloudContainer": "iCloud.org.example.ammo",
+  "teamID": "ABCDEFGHIJ",
+  "appIDPrefix": "OLDPRFX001",
+  "signed": {
+    "com.apple.developer.icloud-container-identifiers": ["iCloud.org.example.ammo"],
+    "com.apple.developer.icloud-services": ["CloudKit"],
+    "com.apple.developer.icloud-container-environment": "Production"
+  },
+  "profile": {
+    "TeamIdentifier": ["ABCDEFGHIJ"],
+    "Entitlements": {
+      "com.apple.developer.icloud-container-identifiers": ["iCloud.org.example.ammo", "iCloud.org.example.other"],
+      "com.apple.developer.icloud-services": "*",
+      "com.apple.developer.icloud-container-environment": ["Development", "Production"]
+    }
+  }
+}

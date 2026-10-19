@@ -124,8 +124,12 @@ public actor Collector {
         }
     }
     public func stop() async {
-        stopped = true; loop?.cancel(); loop = nil
+        stopped = true
+        let scheduler = loop; scheduler?.cancel(); loop = nil
         let task = active?.task; task?.cancel(); _ = try? await task?.value; active = nil
+        // The scheduler holds self across its sleep. Join it before returning
+        // so releasing this collector also releases its exclusive store lease.
+        await scheduler?.value
     }
     public func setSuspended(_ value: Bool) {
         suspended = value
@@ -210,7 +214,12 @@ public actor Collector {
     public func refresh(providerID: String? = nil, scheduled: Bool = false) async throws {
         guard !stopped, !suspended else { throw StoreError.unavailable }
         if let previous = active {
-            try await previous.task.value
+            do { try await previous.task.value }
+            catch is CancellationError where previous.task.isCancelled {
+                // Disabling a provider cancels its pass, not a new refresh
+                // waiting for it to finish after the provider is re-enabled.
+            }
+            try Task.checkCancellation()
             if active?.id == previous.id { active = nil }
             return try await refresh(providerID: providerID, scheduled: scheduled)
         }

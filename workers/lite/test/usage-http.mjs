@@ -23,6 +23,8 @@ const sourceKey = encoded(await crypto.subtle.exportKey("raw", signingKey.public
 const cipherKey = await crypto.subtle.importKey("raw", Buffer.alloc(32, 19), "AES-GCM", false, ["encrypt", "decrypt"]);
 const source = { workspaceId: "usage-ws", sourceDeviceId: "usage-mac", sourceEpoch: "usage-epoch", keyId: "usage-key" };
 function command(args, state) {
+  // Allocate the inspector socket atomically, independently of parallel suites.
+  if (args[0] === "dev") args = [...args, "--inspector-port", "0"];
   const child = spawn(wrangler, args, { cwd: root, env: { ...process.env, WRANGLER_LOG_PATH: join(state, "wrangler.log"), WRANGLER_REGISTRY_PATH: join(state, "registry") }, stdio: ["ignore", "pipe", "pipe"] });
   let output = "";
   const append = (chunk) => { output = (output + chunk.toString()).slice(-12_000); };

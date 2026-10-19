@@ -66,6 +66,14 @@ If these read-only checks are unavailable or return unexpected data, it stops.
 Workflow token permissions are `contents: read` and `actions: read`; no GitHub
 write permission is needed.
 
+The release workflow has only `workflow_dispatch`; it has no tag-push or
+`workflow_run` trigger. Dispatch it on `main` and pass the immutable tag as an
+input. Checking out the selected commit does not change the run's `GITHUB_REF`,
+so the environment's main-only rule remains consistent. A tag push alone does
+not start a release. After dispatch and approval, the selected build/sign/upload/
+readback steps run automatically. Do not add a tag trigger without redesigning
+both the trusted-ref guard and the environment policy.
+
 ### Environment variables
 
 | Name | Existing value to select |
@@ -140,6 +148,15 @@ verification, IPA hashing, and `release_preflight.py` artifact-bound evidence ga
 Its new explicit manual-export option leaves the local automatic-signing default
 unchanged. CI evidence records only observed automation and the configured owner
 release policy; it does not invent a human QA signoff.
+
+Both prepare and upload verify the exported app and widget's signed CloudKit
+container, `CloudKit` service and `Production` environment against the selected
+container and their embedded provisioning profiles. Runtime Info.plist container
+values must match as well. The app also requires `production` APNs in its signature,
+profile and runtime configuration; the widget does not require an APNs entitlement.
+Profile authorization may contain multiple allowed values or `*`, while the final
+signature must contain the concrete production values. These checks use decoded
+profile data without logging it and do not create or change Apple capabilities.
 
 The CI ASC adapter supports only the commands required by that release script.
 It uses Apple API JWT authentication and Xcode's `altool` for upload. It rejects an
