@@ -2,7 +2,7 @@
 import {execFileSync} from 'node:child_process';
 import {createHash} from 'node:crypto';
 import {mkdirSync, readFileSync, writeFileSync} from 'node:fs';
-import {api, builds, internalGroup, list} from './asc.mjs';
+import {api, assertBuildUnused, builds, internalGroup, list} from './asc.mjs';
 
 const read = path => JSON.parse(readFileSync(path, 'utf8'));
 const digest = value => createHash('sha256').update(value).digest('hex');
@@ -23,7 +23,7 @@ async function gates() {
       smoke.screenshotSha256 !== digest(readFileSync('.build/ci/ios-simulator-smoke.png'))) throw new Error('Fresh simulator smoke evidence is missing or stale.');
   if (prepared.sha256 !== digest(readFileSync(prepared.ipa))) throw new Error('IPA changed after verification.');
   await verifyGroup(prepared);
-  if ((await builds(prepared.appID, prepared.version, prepared.buildNumber)).length) throw new Error('Build already exists: inspect Apple state, do not upload a duplicate.');
+  await assertBuildUnused(prepared.appID, prepared.version, prepared.buildNumber);
   const artifact = {appID: prepared.appID, bundleID: process.env.IOS_BUNDLE_ID, version: prepared.version, buildNumber: prepared.buildNumber, ipaSha256: prepared.sha256};
   const statements = {
     'TF-INTERNAL-owner-authorization': `Maintainer enabled TESTFLIGHT_ENABLED in the testflight-internal environment; protected ${ref.tag} at ${ref.tagObject}; triggering actor ${process.env.GITHUB_ACTOR}; workflow ${process.env.GITHUB_RUN_ID}. This records the configured release policy, not a fabricated human QA review.`,

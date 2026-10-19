@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: 'Reviewed annotated tag: testflight/ios/v0.1.4-b11'
+        description: 'Reviewed annotated tag: testflight/ios/vVERSION-bBUILD (unused build)'
         required: true
         type: string
       platform:

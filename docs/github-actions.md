@@ -44,14 +44,20 @@ secrets, code, issue text, logs, receipts, or artifacts.
 1. Protect the default `main` branch and require the `Checks` jobs. Releases also
    independently verify a successful **push** run of `Checks` for the exact tagged
    commit, including `contracts-worker`, `ios-simulator`, `macos`, and `secrets`.
-2. Add an active tag ruleset targeting `refs/tags/testflight/ios/**` with creation,
-   update, and deletion restricted. Only existing trusted release maintainers may
-   bypass creation. Do not move or delete release tags; use a new build number.
-   The guard accepts that exact pattern, an exact tag ref, or `~ALL`, without
-   exclusions. Administrator bypass remains a trusted administrative capability.
+2. Add **two active tag rulesets** targeting `refs/tags/testflight/ios/**` without
+   exclusions. The creation rule restricts creation and permits only existing trusted
+   release maintainers to bypass it. The immutable-tag rule restricts updates and
+   deletions and has **no bypass actors**. A bypass applies to its entire ruleset,
+   so do not combine all three restrictions in the creation rule. Do not move or
+   delete release tags; use a new build number. The runtime guard combines applicable
+   rulesets and accepts the exact pattern above, an exact tag ref, or `~ALL`.
+   GitHub hides bypass actors from read-only workflow tokens: the owner must verify
+   the two bypass lists during setup, without adding an admin token to CI.
 3. Create the `testflight-internal` GitHub environment with at least one **existing**
    required reviewer. The owner can approve a manually requested release; disabling
    self-review is optional and must not require granting somebody new access.
+   Uncheck **Allow administrators to bypass configured protection rules**. The
+   guard requires `can_admins_bypass=false`; missing or enabled bypass stops release.
 4. Use the environment's custom deployment branch policy to allow only the exact
    default branch (`main`, type **branch**). Do not allow tags or other branches.
    This is the boundary that prevents a modified workflow on another branch/tag
@@ -73,6 +79,11 @@ so the environment's main-only rule remains consistent. A tag push alone does
 not start a release. After dispatch and approval, the selected build/sign/upload/
 readback steps run automatically. Do not add a tag trigger without redesigning
 both the trusted-ref guard and the environment policy.
+
+The public PR jobs stay on unsigned GitHub-hosted runners. Do not route them to a
+Mac containing existing signing assets. The CI signing importer requires
+`RUNNER_ENVIRONMENT=github-hosted` and uses temporary assets only; the local release
+entry point continues to use the independently authorized local signing flow.
 
 ### Environment variables
 
@@ -113,12 +124,15 @@ certificates, profiles, bundle IDs, groups, users, or invitations.
 ## iOS release procedure
 
 1. Merge the reviewed source and wait for all four `Checks` jobs on that commit.
-2. Create an annotated tag whose version equals `MARKETING_VERSION` in `project.yml`
-   and whose build number has never been uploaded for that version:
+2. Check both processed builds and upload records in App Store Connect, then choose
+   an unused build number. Do not reuse a number from a local release or an upload
+   with an uncertain outcome. Create an annotated tag whose version equals
+   `MARKETING_VERSION` in `project.yml`:
 
    ```sh
-   git tag -a testflight/ios/v0.1.4-b11 -m 'Internal TestFlight 0.1.4 (11)' COMMIT
-   git push origin refs/tags/testflight/ios/v0.1.4-b11
+   # Replace VERSION, BUILD and COMMIT with verified release values first.
+   git tag -a testflight/ios/vVERSION-bBUILD -m 'Internal TestFlight VERSION (BUILD)' COMMIT
+   git push origin refs/tags/testflight/ios/vVERSION-bBUILD
    ```
 
 3. Dispatch **Internal TestFlight** on `main`, choose `ios`, and supply the exact tag.
@@ -128,7 +142,7 @@ certificates, profiles, bundle IDs, groups, users, or invitations.
 
    ```sh
    gh workflow run testflight-internal.yml --ref main \
-     -f release_tag=testflight/ios/v0.1.4-b11 -f platform=ios -F publish=true
+     -f release_tag=testflight/ios/vVERSION-bBUILD -f platform=ios -F publish=true
    ```
 
 The pipeline checks the tag object, main ancestry, version, full CI outcome, and
@@ -159,8 +173,14 @@ signature must contain the concrete production values. These checks use decoded
 profile data without logging it and do not create or change Apple capabilities.
 
 The CI ASC adapter supports only the commands required by that release script.
-It uses Apple API JWT authentication and Xcode's `altool` for upload. It rejects an
-existing exact build before upload and never automatically retries an upload.
+It uses Apple API JWT authentication and Xcode's `altool` for upload. Both the gate
+and the final upload adapter reject an existing exact build **or upload record**
+for the app, iOS platform, marketing version and build number. Upload records are
+fully paginated: an accepted upload can exist before a processed build appears.
+Every existing upload state, including failed or unknown states, stops automatic
+upload; inspect Apple state and select a new build number. These read checks do not
+reserve a build number against another publisher, so avoid concurrent local/CI
+releases for the same version/build. Upload is never automatically retried.
 After Apple processing, it verifies `VALID` and `INTERNAL_ONLY`, attaches the exact
 build to the existing internal group if needed, then reads back group linkage and
 `IN_BETA_TESTING`. A successful upload command alone is not a successful release.

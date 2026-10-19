@@ -29,7 +29,8 @@ def validate_profile(profile, bundle, team):
         raise ValueError('Provisioning profile team mismatch.')
     entitlements = profile.get('Entitlements', {})
     identifier = entitlements.get('application-identifier', '')
-    if not identifier.endswith('.' + bundle) or '*' in identifier:
+    prefix, separator, profile_bundle = identifier.partition('.')
+    if not separator or not re.fullmatch(r'[A-Z0-9]{10}', prefix) or profile_bundle != bundle:
         raise ValueError('Provisioning profile bundle mismatch or wildcard.')
     if entitlements.get('get-task-allow') is not False or profile.get('ProvisionedDevices') or profile.get('ProvisionsAllDevices'):
         raise ValueError('An existing App Store distribution provisioning profile is required.')
@@ -57,31 +58,45 @@ def save_state(path, state):
 def cleanup():
     private, state_path = paths()
     errors = []
-    if state_path.exists():
-        state = json.loads(state_path.read_text())
-        if state.get('originalKeychains'):
+    try:
+        if state_path.exists():
+            state = {}
             try:
-                command('security', 'list-keychains', '-d', 'user', '-s', *state['originalKeychains'])
+                state = json.loads(state_path.read_text())
+                if not isinstance(state, dict):
+                    raise ValueError('Invalid signing cleanup state.')
             except Exception as error:
                 errors.append(error)
-        if state.get('keychain') and Path(state['keychain']).exists():
+                state = {}
+            if state.get('originalKeychains'):
+                try:
+                    command('security', 'list-keychains', '-d', 'user', '-s', *state['originalKeychains'])
+                except Exception as error:
+                    errors.append(error)
+            if state.get('keychain') and Path(state['keychain']).exists():
+                try:
+                    command('security', 'delete-keychain', state['keychain'])
+                except Exception as error:
+                    errors.append(error)
+            for profile in state.get('profiles', []):
+                try:
+                    Path(profile).unlink(missing_ok=True)
+                except Exception as error:
+                    errors.append(error)
             try:
-                command('security', 'delete-keychain', state['keychain'])
+                state_path.unlink()
             except Exception as error:
                 errors.append(error)
-        for profile in state.get('profiles', []):
-            try:
-                Path(profile).unlink(missing_ok=True)
-            except Exception as error:
-                errors.append(error)
-        state_path.unlink()
-    shutil.rmtree(private, ignore_errors=True)
+    except Exception as error:
+        errors.append(error)
+    finally:
+        shutil.rmtree(private, ignore_errors=True)
     if errors or private.exists():
         raise RuntimeError('Temporary signing cleanup encountered an error; the ephemeral runner must be discarded.')
 
 
 def prepare():
-    if os.environ.get('GITHUB_ACTIONS') != 'true':
+    if os.environ.get('GITHUB_ACTIONS') != 'true' or os.environ.get('RUNNER_ENVIRONMENT') != 'github-hosted':
         raise RuntimeError('Signing import is limited to the ephemeral GitHub runner.')
     required = ['APPLE_TEAM_ID', 'IOS_BUNDLE_ID', 'IOS_DISTRIBUTION_CERTIFICATE_BASE64',
                 'IOS_DISTRIBUTION_CERTIFICATE_PASSWORD', 'IOS_APP_PROFILE_BASE64',
