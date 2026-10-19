@@ -130,9 +130,11 @@ final class CodexIsolationTests: XCTestCase {
         let profile = try CodexInstanceProfile(root: root)
         try profile.prepare()
         let callback = AuthorizationURLBox()
+        // This verifies the login protocol, not interpreter startup latency on
+        // a shared CI runner. Timeout/cancellation have separate bounded tests.
         let result = try await BoundedRPC.login(executable: URL(fileURLWithPath: "/usr/bin/python3"), arguments: [path.path],
                                                 environment: try profile.environment(base: ["PATH": "/usr/bin:/bin"]),
-                                                timeout: 2, onAuthorizationURL: callback.set)
+                                                timeout: 10, onAuthorizationURL: callback.set)
         XCTAssertEqual(callback.get()?.absoluteString, "https://auth.openai.example/authorize")
         XCTAssertEqual(result.identityFingerprint.count, 64)
     }

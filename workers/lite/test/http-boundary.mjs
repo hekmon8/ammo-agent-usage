@@ -19,6 +19,9 @@ const recipientKey = Buffer.alloc(32, 2).toString("base64url");
 const pairingSecret = "p".repeat(43);
 
 function command(args) {
+  // Let the OS allocate each inspector socket; parallel suites must not race
+  // Wrangler's probe-then-bind selection of the default inspector port.
+  if (args[0] === "dev") args = [...args, "--inspector-port", "0"];
   const child = spawn(wrangler, args, { cwd: root, env: { ...process.env, WRANGLER_LOG_PATH: join(state, "wrangler.log"), WRANGLER_REGISTRY_PATH: join(state, "registry") }, stdio: ["ignore", "pipe", "pipe"] });
   let output = "";
   const append = (data) => { output = (output + data.toString()).slice(-12_000); };

@@ -21,6 +21,8 @@ const persistentViewerToken = "synthetic-persistent-viewer-token-0001";
 const hash = async (text) => Buffer.from(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text))).toString("hex");
 
 function command(args, state) {
+  // Allocate the inspector socket atomically, independently of parallel suites.
+  if (args[0] === "dev") args = [...args, "--inspector-port", "0"];
   const child = spawn(wrangler, args, { cwd: root, env: { ...process.env, WRANGLER_LOG_PATH: join(state, "wrangler.log"), WRANGLER_REGISTRY_PATH: join(state, "registry") }, stdio: ["ignore", "pipe", "pipe"] });
   let output = "";
   const append = (chunk) => { output = (output + chunk.toString()).slice(-12_000); };
