@@ -5,7 +5,7 @@ import { createHash } from 'node:crypto';
 import { readFileSync, writeFileSync, existsSync, mkdtempSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { resolve, join } from 'node:path';
-import { findExportedIPA, validatePreparedIPA } from './testflight-artifact.mjs';
+import { findExportedIPA, validatePreparedIPA, decodeProfileEntitlements, verifyDistributionEntitlements } from './testflight-artifact.mjs';
 import { exportOptions } from './ci/signing-options.mjs';
 const root = resolve(import.meta.dirname, '..');
 const project = readFileSync(join(root, 'project.yml'), 'utf8');
@@ -31,6 +31,7 @@ for (const key of ['APPLE_TEAM_ID', 'IOS_BUNDLE_ID', 'QI_APP_GROUP']) {
 if (!/^[A-Z0-9]{10}$/.test(process.env.APPLE_TEAM_ID)) throw new Error('Invalid Apple Team ID.');
 const config = {
   bundleId: process.env.IOS_BUNDLE_ID, teamId: process.env.APPLE_TEAM_ID,
+  icloudContainer: process.env.QI_ICLOUD_CONTAINER || 'iCloud.' + process.env.IOS_BUNDLE_ID,
   version: marketingVersion, scheme: process.env.IOS_SCHEME,
   archivePath: resolve(root, process.env.IOS_ARCHIVE_PATH),
   exportPath: resolve(root, process.env.IOS_EXPORT_PATH),
@@ -100,7 +101,7 @@ if(mode==='--upload') {
   validatePreparedIPA(config.exportPath, receipt.ipa);
   if(createHash('sha256').update(readFileSync(receipt.ipa)).digest('hex')!==receipt.sha256) throw new Error('Prepared IPA changed.');
   if(receipt.version !== config.version || receipt.appID !== resolveStrictAscAppId(config.bundleId) || !/^\d+$/.test(receipt.buildNumber)) throw new Error('Prepared release identity does not match current configuration.');
-  verifyIPA(receipt.ipa,{bundleID:config.bundleId,version:config.version,buildNumber:receipt.buildNumber,teamID:config.teamId,appGroup:process.env.QI_APP_GROUP});
+  verifyIPA(receipt.ipa,{bundleID:config.bundleId,version:config.version,buildNumber:receipt.buildNumber,teamID:config.teamId,appGroup:process.env.QI_APP_GROUP,icloudContainer:config.icloudContainer});
   command('python3',['scripts/release_preflight.py','--profile','internal-testflight',
     '--app-id',receipt.appID,'--bundle-id',config.bundleId,'--version',receipt.version,
     '--build-number',receipt.buildNumber,'--ipa-sha256',receipt.sha256]);
@@ -116,11 +117,11 @@ command('/bin/mkdir',['-p',config.exportPath]);
 writeFileSync(config.exportOptions, JSON.stringify(options), {mode:0o600});
 command('/usr/bin/plutil',['-convert','xml1',config.exportOptions]);
 command('xcodebuild',['-workspace',process.env.IOS_WORKSPACE,'-scheme',config.scheme,'-configuration',process.env.IOS_CONFIGURATION,'-destination','generic/platform=iOS','-archivePath',config.archivePath,
-  `DEVELOPMENT_TEAM=${config.teamId}`,`QI_BUNDLE_PREFIX=${config.bundleId}`,`QI_APP_GROUP=${process.env.QI_APP_GROUP}`,`QI_ICLOUD_CONTAINER=${process.env.QI_ICLOUD_CONTAINER || 'iCloud.'+config.bundleId}`,
+  `DEVELOPMENT_TEAM=${config.teamId}`,`QI_BUNDLE_PREFIX=${config.bundleId}`,`QI_APP_GROUP=${process.env.QI_APP_GROUP}`,`QI_ICLOUD_CONTAINER=${config.icloudContainer}`,
   `CURRENT_PROJECT_VERSION=${buildNumber}`,`MARKETING_VERSION=${config.version}`,'archive']);
 command('xcodebuild',['-exportArchive','-archivePath',config.archivePath,'-exportPath',config.exportPath,'-exportOptionsPlist',config.exportOptions]);
 const ipa=findExportedIPA(config.exportPath);
-verifyIPA(ipa,{bundleID:config.bundleId,version:config.version,buildNumber:String(buildNumber),teamID:config.teamId,appGroup:process.env.QI_APP_GROUP});
+verifyIPA(ipa,{bundleID:config.bundleId,version:config.version,buildNumber:String(buildNumber),teamID:config.teamId,appGroup:process.env.QI_APP_GROUP,icloudContainer:config.icloudContainer});
 const receipt={commit,appID,buildNumber:String(buildNumber),version:config.version,ipa,
   sha256:createHash('sha256').update(readFileSync(ipa)).digest('hex'),internalOnly:true,
   exportOptionsSha256:createHash('sha256').update(readFileSync(config.exportOptions)).digest('hex')};
@@ -146,7 +147,7 @@ function signedEntitlements(bundle) {
 function requireArrayValue(entitlements,key,value,bundle) {
   if(!Array.isArray(entitlements[key]) || !entitlements[key].includes(value)) throw new Error(`Signed ${key} mismatch for ${bundle}.`);
 }
-function verifyBundle(bundle,{bundleID,version,buildNumber,teamID,appGroup,keychainBundleID}) {
+function verifyBundle(bundle,{bundleID,version,buildNumber,teamID,appGroup,keychainBundleID,icloudContainer,requiresPush}) {
   const info=plist(join(bundle,'Info.plist'));
   if(info.CFBundleIdentifier!==bundleID || info.CFBundleShortVersionString!==version || String(info.CFBundleVersion)!==buildNumber) throw new Error(`Exported identity/version mismatch for ${bundleID}.`);
   const privacy=join(bundle,'PrivacyInfo.xcprivacy');
@@ -161,9 +162,11 @@ function verifyBundle(bundle,{bundleID,version,buildNumber,teamID,appGroup,keych
   const prefix=applicationID.slice(0,-suffix.length);
   requireArrayValue(entitlements,'com.apple.security.application-groups',appGroup,bundleID);
   requireArrayValue(entitlements,'keychain-access-groups',`${prefix}.${keychainBundleID}.sync`,bundleID);
+  const profileXML=command('/usr/bin/security',['cms','-D','-i',join(bundle,'embedded.mobileprovision')],{stdio:['ignore','pipe','pipe'],encoding:'utf8'});
+  verifyDistributionEntitlements(info,entitlements,decodeProfileEntitlements(profileXML),{bundleID,teamID,icloudContainer,requiresPush});
   return prefix;
 }
-function verifyIPA(ipa,{bundleID,version,buildNumber,teamID,appGroup}) {
+function verifyIPA(ipa,{bundleID,version,buildNumber,teamID,appGroup,icloudContainer}) {
   const directory=mkdtempSync(join(tmpdir(),'quota-island-ipa-'));
   try {
     const entries=command('/usr/bin/unzip',['-Z1',ipa],{stdio:'pipe',encoding:'utf8'}).split('\n');
@@ -172,8 +175,8 @@ function verifyIPA(ipa,{bundleID,version,buildNumber,teamID,appGroup}) {
     const app=findBundle(join(directory,'Payload'),'.app',bundleID);
     const widgetID=`${bundleID}.widgets`;
     const widget=findBundle(join(app,'PlugIns'),'.appex',widgetID);
-    const appPrefix=verifyBundle(app,{bundleID,version,buildNumber,teamID,appGroup,keychainBundleID:bundleID});
-    const widgetPrefix=verifyBundle(widget,{bundleID:widgetID,version,buildNumber,teamID,appGroup,keychainBundleID:bundleID});
+    const appPrefix=verifyBundle(app,{bundleID,version,buildNumber,teamID,appGroup,keychainBundleID:bundleID,icloudContainer,requiresPush:true});
+    const widgetPrefix=verifyBundle(widget,{bundleID:widgetID,version,buildNumber,teamID,appGroup,keychainBundleID:bundleID,icloudContainer,requiresPush:false});
     if(appPrefix!==widgetPrefix) throw new Error('App and Widget signing prefixes differ.');
     const info=plist(join(app,'Info.plist'));
     const primaryIcon=info.CFBundleIcons?.CFBundlePrimaryIcon;

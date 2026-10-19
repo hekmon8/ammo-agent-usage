@@ -52,7 +52,15 @@ test('dry-run needs no ASC or private helper and does not write export options',
   const result=spawnSync(process.execPath,['scripts/testflight-ios.mjs','--dry-run'],{env,encoding:'utf8'});
   assert.equal(result.status,0,result.stderr);
   assert.equal(JSON.parse(result.stdout).bundleId,'org.example.ammo');
+  assert.equal(JSON.parse(result.stdout).icloudContainer,'iCloud.org.example.ammo');
   assert.equal(existsSync(path)?statSync(path).mtimeMs:null,before);
+});
+test('dry-run preserves an explicitly selected existing CloudKit container',()=>{
+  const env={PATH:process.env.PATH,APPLE_TEAM_ID:'ABCDEFGHIJ',IOS_BUNDLE_ID:'org.example.ammo',
+    QI_APP_GROUP:'group.org.example.ammo',QI_ICLOUD_CONTAINER:'iCloud.org.example.shared'};
+  const result=spawnSync(process.execPath,['scripts/testflight-ios.mjs','--dry-run'],{env,encoding:'utf8'});
+  assert.equal(result.status,0,result.stderr);
+  assert.equal(JSON.parse(result.stdout).icloudContainer,env.QI_ICLOUD_CONTAINER);
 });
 test('external TestFlight export is rejected before ASC or Xcode work',()=>{
   const env={PATH:process.env.PATH,APPLE_TEAM_ID:'ABCDEFGHIJ',IOS_BUNDLE_ID:'org.example.ammo',
