@@ -1166,7 +1166,9 @@ private struct PhoneHost: View {
             busy = false
             if refreshAgain {
                 refreshAgain = false
-                if !Task.isCancelled && scenePhase == .active { Task { await refresh() } }
+                // A foreground request queued while background work was busy
+                // owns a fresh opportunity even when that background task expired.
+                if scenePhase == .active { Task { await refresh() } }
             }
         }
         await reconcileActivitySelection()
