@@ -4,6 +4,7 @@ import QuotaPhone
 import QuotaCore
 import QuotaDesign
 import QuotaSync
+import QuotaStore
 import QuotaWidgets
 import WidgetKit
 import ActivityKit
@@ -18,6 +19,7 @@ struct AmmoPhoneApp: App {
     private let fixture: Snapshot?
 
     init() {
+        PhoneFileTransactionExecution.install()
 #if DEBUG
         let arguments = CommandLine.arguments
         if let index = arguments.firstIndex(of: "--fixture"), arguments.indices.contains(index + 1) {
@@ -39,7 +41,76 @@ struct AmmoPhoneApp: App {
         PhoneBackgroundRefresh.register()
     }
 
-    var body: some Scene { WindowGroup { PhoneHost(fixtureRequested: fixtureRequested, fixture: fixture) } }
+    var body: some Scene {
+        WindowGroup {
+            PhoneHost(fixtureRequested: fixtureRequested, fixture: fixture)
+                .task {
+                    #if DEBUG
+                    if fixtureRequested && CommandLine.arguments.contains("--fixture-file-transaction-check") {
+                        await PhoneFileTransactionExecution.runFixtureCheck()
+                    }
+                    #endif
+                }
+        }
+    }
+}
+
+/// Only the application host may request UIApplication execution time. Widget
+/// extensions retain their system-managed execution lifetime and never call it.
+@MainActor
+private final class PhoneFileTransactionExecution {
+    static func install() {
+        FileTransaction.installProtectionProvider {
+            if Thread.isMainThread {
+                return try MainActor.assumeIsolated { try begin() }
+            }
+            return try DispatchQueue.main.sync {
+                try MainActor.assumeIsolated { try begin() }
+            }
+        }
+    }
+
+    private static func begin() throws -> FileTransactionProtection {
+        try PhoneFileTransactionBackgroundAssertion.begin(start: { expired in
+            let identifier = UIApplication.shared.beginBackgroundTask(withName: "Ammo file transaction") { @Sendable in
+                MainActor.assumeIsolated { expired() }
+            }
+            return identifier == .invalid ? nil : identifier.rawValue
+        }, end: { UIApplication.shared.endBackgroundTask(UIBackgroundTaskIdentifier(rawValue: $0)) })
+    }
+
+    #if DEBUG
+    /// Synthetic simulator probe for the real UIKit adapter. Never uses pairing,
+    /// shared containers, provider data, or the release application's cache.
+    static func runFixtureCheck() async {
+        struct Receipt: Codable { var cacheAdmission: Bool; var cancellationPreservedCache: Bool }
+        let receipt: Receipt
+        do {
+            receipt = try await Task.detached {
+                let directory = FileManager.default.temporaryDirectory.appendingPathComponent("file-transaction-fixture-" + UUID().uuidString)
+                let signer = Curve25519.Signing.PrivateKey(), key = SymmetricKey(size: .bits256)
+                let snapshot = try Snapshot.make(windows: [], deviceID: "fixture", epoch: "fixture", sequence: 1, capturedAt: Date())
+                let trust = SourceTrust(workspaceID: "fixture", deviceID: "fixture", epoch: "fixture", keyID: "fixture", publicKey: signer.publicKey.rawRepresentation)
+                let cache = try VerifiedCache(directory: directory, trust: trust)
+                let bytes = try EnvelopeCodec.seal(snapshot, workspaceID: "fixture", keyID: "fixture", key: key, signingKey: signer)
+                let accepted = try await cache.accept(bytes, key: key)
+                let cancellationRejected = await Task {
+                    withUnsafeCurrentTask { $0?.cancel() }
+                    do { _ = try await cache.accept(bytes, key: key); return false }
+                    catch is CancellationError { return true }
+                    catch { return false }
+                }.value
+                let restored = try await cache.latest(key: key)
+                return Receipt(cacheAdmission: accepted.sourceSequence == 1,
+                               cancellationPreservedCache: cancellationRejected && restored?.sourceSequence == 1)
+            }.value
+        } catch { receipt = Receipt(cacheAdmission: false, cancellationPreservedCache: false) }
+        if let directory = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first,
+           let data = try? JSONEncoder().encode(receipt) {
+            try? data.write(to: directory.appendingPathComponent("file-transaction-fixture.json"), options: .atomic)
+        }
+    }
+    #endif
 }
 
 /// Forwards the system APNs registration outcome to the alert registrar.
@@ -1095,7 +1166,9 @@ private struct PhoneHost: View {
             busy = false
             if refreshAgain {
                 refreshAgain = false
-                if !Task.isCancelled && scenePhase == .active { Task { await refresh() } }
+                // A foreground request queued while background work was busy
+                // owns a fresh opportunity even when that background task expired.
+                if scenePhase == .active { Task { await refresh() } }
             }
         }
         await reconcileActivitySelection()

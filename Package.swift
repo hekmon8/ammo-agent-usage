@@ -26,7 +26,7 @@ let package = Package(
         .testTarget(name: "AmmoMacTests", dependencies: ["AmmoMac", "QuotaCore", "QuotaDesign", "QuotaPhone"], path: "tests/macos"),
         .testTarget(name: "QuotaWidgetTests", dependencies: ["QuotaWidgets", "QuotaCore"], path: "tests/widgets"),
         .testTarget(name: "QuotaIPCTests", dependencies: ["QuotaIPC", "QuotaStore"], path: "tests/ipc"),
-        .testTarget(name: "QuotaPhoneTests", dependencies: ["QuotaPhone"], path: "tests/ios"),
+        .testTarget(name: "QuotaPhoneTests", dependencies: ["QuotaPhone", "QuotaStore"], path: "tests/ios"),
         .target(name: "QuotaQuery", dependencies: ["QuotaCore", "QuotaStore"], path: "packages/QuotaQuery/Sources/QuotaQuery", resources: [.process("Resources")]),
         .target(name: "QuotaMCP", dependencies: ["QuotaQuery", .product(name: "MCP", package: "swift-sdk")], path: "packages/QuotaQuery/Sources/QuotaMCP"),
         .executableTarget(name: "qi", dependencies: ["QuotaQuery", "QuotaMCP", "QuotaCore", "QuotaStore", "QuotaIPC"], path: "apps/cli/qi"),

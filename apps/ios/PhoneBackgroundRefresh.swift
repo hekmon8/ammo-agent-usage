@@ -43,18 +43,20 @@ public enum PhoneBackgroundRefresh {
         }
         let completion = BackgroundTaskCompletion()
         task.expirationHandler = {
+            guard completion.expire() else { return }
             Task { @MainActor in
                 PhoneBackgroundRefresh.schedule()
-                guard completion.claim() else { return }
                 task.setTaskCompleted(success: false)
             }
         }
-        Task { @MainActor in
+        let work = Task { @MainActor in
             PhoneBackgroundRefresh.schedule()
+            guard !Task.isCancelled else { return }
             await PhoneBackgroundRefresh.performRefresh?()
             guard completion.claim() else { return }
-            task.setTaskCompleted(success: true)
+            task.setTaskCompleted(success: !Task.isCancelled)
         }
+        completion.attach(work)
     }
 
     /// Re-arms the request. Safe to call repeatedly; the earliest begin date keeps
@@ -66,25 +68,41 @@ public enum PhoneBackgroundRefresh {
         try? BGTaskScheduler.shared.submit(request)
     }
 }
+#endif
 
 /// The system may expire a task while the refresh is still running; exactly one
-/// caller may report completion.
-final class BackgroundTaskCompletion: Sendable {
-    private let claimed = AtomicFlag()
-
-    func claim() -> Bool { claimed.setIfFalse() }
-}
-
-final class AtomicFlag: @unchecked Sendable {
+/// caller may report completion. Expiration before attachment must also cancel
+/// the refresh; a late completion cannot report success after system expiry.
+final class BackgroundTaskCompletion: @unchecked Sendable {
     private let lock = NSLock()
-    private var value = false
+    private var claimed = false
+    private var work: Task<Void, Never>?
 
-    func setIfFalse() -> Bool {
+    func attach(_ task: Task<Void, Never>) {
+        lock.lock()
+        let cancel = claimed
+        if !cancel { work = task }
+        lock.unlock()
+        if cancel { task.cancel() }
+    }
+
+    func claim() -> Bool {
         lock.lock()
         defer { lock.unlock() }
-        guard !value else { return false }
-        value = true
+        guard !claimed else { return false }
+        claimed = true
+        work = nil
+        return true
+    }
+
+    func expire() -> Bool {
+        lock.lock()
+        guard !claimed else { lock.unlock(); return false }
+        claimed = true
+        let task = work
+        work = nil
+        lock.unlock()
+        task?.cancel()
         return true
     }
 }
-#endif

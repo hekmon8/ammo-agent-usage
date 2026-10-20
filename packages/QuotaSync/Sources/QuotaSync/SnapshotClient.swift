@@ -52,24 +52,69 @@ public actor SnapshotClient {
     private let key: SymmetricKey
     private var etag: String?
     private var lastAttempt: Date?
-    private var active: Task<Snapshot?, Error>?
+    private struct Refresh {
+        let id: UUID
+        let task: Task<Void, Never>
+        var waiters: [UUID: CheckedContinuation<Snapshot?, Error>]
+    }
+    private var active: Refresh?
+    // Internal observation lets concurrency tests wait for actual registration.
+    var refreshWaiterCount: Int { active?.waiters.count ?? 0 }
     public private(set) var clockOffset: TimeInterval = 0
     public init(transport: SyncTransport, cache: VerifiedCache, token: String, key: SymmetricKey) {
         self.transport = transport; self.cache = cache; self.token = token; self.key = key
     }
     public func cached() async throws -> Snapshot? { try await cache.latest(key: key) }
     public func refresh(now: Date = Date()) async throws -> Snapshot? {
-        if let active { return try await active.value }
-        if let lastAttempt, now.timeIntervalSince(lastAttempt) < 10 { return try await cached() }
-        lastAttempt = now
-        let task = Task { try await self.pull() }
-        active = task
-        defer { active = nil }
-        return try await task.value
+        try Task.checkCancellation()
+        if active == nil, let lastAttempt, now.timeIntervalSince(lastAttempt) < 10 { return try await cached() }
+        let waiter = UUID()
+        let value: Snapshot? = try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                guard !Task.isCancelled else { continuation.resume(throwing: CancellationError()); return }
+                if active != nil {
+                    active?.waiters[waiter] = continuation
+                    return
+                }
+                lastAttempt = now
+                let id = UUID()
+                let task = Task {
+                    let result: Result<Snapshot?, Error>
+                    do { result = .success(try await self.pull()) }
+                    catch { result = .failure(error) }
+                    self.finishRefresh(id, result: result)
+                }
+                active = Refresh(id: id, task: task, waiters: [waiter: continuation])
+            }
+        } onCancel: {
+            Task { await self.cancelRefresh(waiter) }
+        }
+        try Task.checkCancellation()
+        return value
+    }
+
+    private func cancelRefresh(_ waiter: UUID) {
+        guard let continuation = active?.waiters.removeValue(forKey: waiter) else { return }
+        if active?.waiters.isEmpty == true {
+            active?.task.cancel()
+            active = nil
+            // A cancelled attempt must not throttle a new foreground request.
+            lastAttempt = nil
+        }
+        continuation.resume(throwing: CancellationError())
+    }
+
+    private func finishRefresh(_ id: UUID, result: Result<Snapshot?, Error>) {
+        // An abandoned request may return after its replacement has started.
+        guard let refresh = active, refresh.id == id else { return }
+        active = nil
+        for continuation in refresh.waiters.values { continuation.resume(with: result) }
     }
     private func pull() async throws -> Snapshot? {
+        try Task.checkCancellation()
         let start = Date()
         let (data, response) = try await transport.request(path: "/v1/snapshot", token: token, etag: etag)
+        try Task.checkCancellation()
         if let value = response.value(forHTTPHeaderField: "Date") {
             let formatter = DateFormatter(); formatter.locale = Locale(identifier: "en_US_POSIX"); formatter.timeZone = TimeZone(secondsFromGMT: 0); formatter.dateFormat = "EEE, dd MMM yyyy HH:mm:ss z"
             if let server = formatter.date(from: value) { clockOffset = server.timeIntervalSince(start.addingTimeInterval(Date().timeIntervalSince(start) / 2)) }
@@ -77,7 +122,9 @@ public actor SnapshotClient {
         if response.statusCode == 304 { return try await cached() }
         guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any],
               Set(object.keys) == ["envelope", "receipt"], let envelope = object["envelope"] as? [String: Any] else { throw TransportError.malformed }
+        try Task.checkCancellation()
         let snapshot = try await cache.accept(JSONSerialization.data(withJSONObject: envelope), key: key)
+        try Task.checkCancellation()
         etag = response.value(forHTTPHeaderField: "ETag")
         return snapshot
     }

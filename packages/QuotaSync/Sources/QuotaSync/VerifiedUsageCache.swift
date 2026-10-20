@@ -19,19 +19,18 @@ public actor VerifiedUsageCache {
         catch StoreError.unavailable { return nil }
     }
     public func accept(_ data: Data, key: SymmetricKey) throws -> TokenUsageSnapshot {
-        let transaction = try FileTransaction(directory: directory, name: "verified-usage-cache")
-        defer { withExtendedLifetime(transaction) {} }
+        try Task.checkCancellation()
         let incoming = try UsageEnvelopeCodec.decode(data)
         let snapshot = try UsageEnvelopeCodec.open(data, trust: trust, key: key)
         let url = directory.appendingPathComponent("verified-usage-envelope.json")
-        do {
-            let oldData = try PrivateFile.read(url, maxBytes: 262_144)
-            _ = try UsageEnvelopeCodec.open(oldData, trust: trust, key: key)
-            let old = try UsageEnvelopeCodec.decode(oldData)
-            guard incoming.sequence > old.sequence || (incoming.sequence == old.sequence && incoming.contentHash == old.contentHash) else { throw SyncError.replay }
-        } catch StoreError.unavailable { /* First authenticated snapshot. */ }
-        try PrivateFile.write(data, to: url)
-        return snapshot
+        return try OptimisticFileUpdate.update(at: url, lockName: "verified-usage-cache", maxBytes: 262_144) { oldData in
+            if let oldData {
+                _ = try UsageEnvelopeCodec.open(oldData, trust: trust, key: key)
+                let old = try UsageEnvelopeCodec.decode(oldData)
+                guard incoming.sequence > old.sequence || (incoming.sequence == old.sequence && incoming.contentHash == old.contentHash) else { throw SyncError.replay }
+            }
+            return (data, snapshot)
+        }
     }
 }
 
@@ -41,8 +40,11 @@ public actor PendingUsageEnvelope {
     public func prepare(snapshot: TokenUsageSnapshot, workspaceID: String, keyID: String, key: SymmetricKey, signer: Curve25519.Signing.PrivateKey) throws -> Data {
         let transaction = try FileTransaction(directory: file.deletingLastPathComponent(), name: "pending-usage-envelope")
         defer { withExtendedLifetime(transaction) {} }
-        do {
-            let data = try PrivateFile.read(file, maxBytes: 262_144)
+        let existingData: Data?
+        do { existingData = try PrivateFile.read(file, maxBytes: 262_144) }
+        catch StoreError.unavailable { existingData = nil }
+        try transaction.checkCancellation()
+        if let data = existingData {
             let pending = try UsageEnvelopeCodec.decode(data)
             guard pending.workspaceId == workspaceID, pending.sourceDeviceId == snapshot.sourceDeviceId, pending.sourceEpoch == snapshot.sourceEpoch, pending.keyId == keyID else { throw SyncError.configuration }
             // Revoking local usage consent supersedes an older unsent aggregate.
@@ -53,14 +55,18 @@ public actor PendingUsageEnvelope {
                 let previous = try UsageEnvelopeCodec.open(data, trust: trust, key: key)
                 if previous.isDisabledObservation { return data }
                 guard pending.sequence < snapshot.sourceSequence else { throw SyncError.replay }
+                try transaction.checkCancellation()
                 let replacement = try UsageEnvelopeCodec.seal(snapshot, workspaceID: workspaceID, keyID: keyID, key: key, signingKey: signer)
-                try PrivateFile.write(replacement, to: file)
+                try transaction.checkCancellation()
+                try PrivateFile.write(replacement, to: file, checkCancellation: transaction.checkCancellation)
                 return replacement
             }
             return data
-        } catch StoreError.unavailable {
+        } else {
+            try transaction.checkCancellation()
             let data = try UsageEnvelopeCodec.seal(snapshot, workspaceID: workspaceID, keyID: keyID, key: key, signingKey: signer)
-            try PrivateFile.write(data, to: file)
+            try transaction.checkCancellation()
+            try PrivateFile.write(data, to: file, checkCancellation: transaction.checkCancellation)
             return data
         }
     }
@@ -68,19 +74,22 @@ public actor PendingUsageEnvelope {
     public func discardAcknowledged(sequence: Int64, contentHash: String) throws {
         let transaction = try FileTransaction(directory: file.deletingLastPathComponent(), name: "pending-usage-envelope")
         defer { withExtendedLifetime(transaction) {} }
-        do {
-            let existing = try UsageEnvelopeCodec.decode(PrivateFile.read(file, maxBytes: 262_144))
-            if existing.sequence <= sequence {
-                guard existing.sequence == sequence, existing.contentHash == contentHash else { throw SyncError.replay }
-                try FileManager.default.removeItem(at: file)
-            }
-        } catch StoreError.unavailable { /* Already removed. */ }
+        let data: Data
+        do { data = try PrivateFile.read(file, maxBytes: 262_144) }
+        catch StoreError.unavailable { return /* Already removed. */ }
+        let existing = try UsageEnvelopeCodec.decode(data)
+        if existing.sequence <= sequence {
+            guard existing.sequence == sequence, existing.contentHash == contentHash else { throw SyncError.replay }
+            try transaction.checkCancellation()
+            try FileManager.default.removeItem(at: file)
+        }
     }
     public func acknowledge(contentHash: String) throws {
         let transaction = try FileTransaction(directory: file.deletingLastPathComponent(), name: "pending-usage-envelope")
         defer { withExtendedLifetime(transaction) {} }
         let existing = try UsageEnvelopeCodec.decode(PrivateFile.read(file, maxBytes: 262_144))
         guard existing.contentHash == contentHash else { throw SyncError.replay }
+        try transaction.checkCancellation()
         // Only delete this owned, acknowledged pending ciphertext, never account or user data.
         try FileManager.default.removeItem(at: file)
     }
