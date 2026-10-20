@@ -19,19 +19,18 @@ public actor VerifiedCache {
         catch StoreError.unavailable { return nil }
     }
     public func accept(_ data: Data, key: SymmetricKey) throws -> Snapshot {
-        let transaction = try FileTransaction(directory: directory, name: "verified-cache")
-        defer { withExtendedLifetime(transaction) {} }
+        try Task.checkCancellation()
         let incoming = try EnvelopeCodec.decode(data)
         let snapshot = try EnvelopeCodec.open(data, trust: trust, key: key)
         let url = directory.appendingPathComponent("verified-envelope.json")
-        do {
-            let oldData = try PrivateFile.read(url, maxBytes: 262_144)
-            _ = try EnvelopeCodec.open(oldData, trust: trust, key: key)
-            let old = try EnvelopeCodec.decode(oldData)
-            guard incoming.sequence > old.sequence || (incoming.sequence == old.sequence && incoming.contentHash == old.contentHash) else { throw SyncError.replay }
-        } catch StoreError.unavailable { /* First authenticated snapshot. */ }
-        try PrivateFile.write(data, to: url)
-        return snapshot
+        return try OptimisticFileUpdate.update(at: url, lockName: "verified-cache", maxBytes: 262_144) { oldData in
+            if let oldData {
+                _ = try EnvelopeCodec.open(oldData, trust: trust, key: key)
+                let old = try EnvelopeCodec.decode(oldData)
+                guard incoming.sequence > old.sequence || (incoming.sequence == old.sequence && incoming.contentHash == old.contentHash) else { throw SyncError.replay }
+            }
+            return (data, snapshot)
+        }
     }
 }
 
@@ -41,14 +40,19 @@ public actor PendingEnvelope {
     public func prepare(snapshot: Snapshot, workspaceID: String, keyID: String, key: SymmetricKey, signer: Curve25519.Signing.PrivateKey) throws -> Data {
         let transaction = try FileTransaction(directory: file.deletingLastPathComponent(), name: "pending-envelope")
         defer { withExtendedLifetime(transaction) {} }
-        do {
-            let data = try PrivateFile.read(file, maxBytes: 262_144)
+        let existingData: Data?
+        do { existingData = try PrivateFile.read(file, maxBytes: 262_144) }
+        catch StoreError.unavailable { existingData = nil }
+        try transaction.checkCancellation()
+        if let data = existingData {
             let pending = try EnvelopeCodec.decode(data)
             guard pending.workspaceId == workspaceID, pending.sourceDeviceId == snapshot.sourceDeviceId, pending.sourceEpoch == snapshot.sourceEpoch, pending.keyId == keyID else { throw SyncError.configuration }
             return data
-        } catch StoreError.unavailable {
+        } else {
+            try transaction.checkCancellation()
             let data = try EnvelopeCodec.seal(snapshot, workspaceID: workspaceID, keyID: keyID, key: key, signingKey: signer)
-            try PrivateFile.write(data, to: file)
+            try transaction.checkCancellation()
+            try PrivateFile.write(data, to: file, checkCancellation: transaction.checkCancellation)
             return data
         }
     }
@@ -57,6 +61,7 @@ public actor PendingEnvelope {
         defer { withExtendedLifetime(transaction) {} }
         let existing = try EnvelopeCodec.decode(PrivateFile.read(file, maxBytes: 262_144))
         guard existing.contentHash == contentHash else { throw SyncError.replay }
+        try transaction.checkCancellation()
         // Only delete this owned, acknowledged pending ciphertext, never account or user data.
         try FileManager.default.removeItem(at: file)
     }
