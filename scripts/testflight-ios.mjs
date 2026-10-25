@@ -2,41 +2,65 @@
 // Self-contained archive, artifact verification and explicit ASC upload.
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { readFileSync, writeFileSync, existsSync, mkdtempSync, readdirSync, rmSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, lstatSync, mkdtempSync, mkdirSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { resolve, join } from 'node:path';
+import { resolve, join, relative, isAbsolute } from 'node:path';
 import { findExportedIPA, validatePreparedIPA, decodeProfileEntitlements, verifyDistributionEntitlements } from './testflight-artifact.mjs';
-import { exportOptions } from './ci/signing-options.mjs';
+import { exportOptions, distributionMode, assertInternalRelease } from './ci/signing-options.mjs';
+const mode = process.argv[2];
+if (!['--dry-run','--prepare','--upload'].includes(mode)) throw new Error('Choose --dry-run, --prepare, or --upload.');
+const releaseMode = distributionMode();
+if (mode === '--upload') assertInternalRelease();
 const root = resolve(import.meta.dirname, '..');
 const project = readFileSync(join(root, 'project.yml'), 'utf8');
 const marketingVersion = project.match(/^\s*MARKETING_VERSION:\s*['"]?([0-9]+\.[0-9]+\.[0-9]+)['"]?\s*$/m)?.[1];
 if (!marketingVersion) throw new Error('Missing MARKETING_VERSION in project.yml.');
 process.chdir(root);
+const outputRoot = releaseMode === 'external-candidate' ? '.build/TestFlight/external-candidate' : '.build/TestFlight';
 const defaults = {
   IOS_WORKSPACE: 'Ammo.xcworkspace', IOS_SCHEME: 'AmmoPhone',
   IOS_CONFIGURATION: 'Release',
-  IOS_VERSION: marketingVersion, IOS_TESTFLIGHT_INTERNAL_ONLY: '1',
-  IOS_TESTFLIGHT_OUTPUT_ROOT: '.build/TestFlight',
-  IOS_ARCHIVE_PATH: '.build/TestFlight/AmmoPhone.xcarchive',
-  IOS_EXPORT_PATH: '.build/TestFlight/export',
-  IOS_EXPORT_OPTIONS_PLIST: '.build/TestFlight/ExportOptions.plist',
+  IOS_VERSION: marketingVersion,
+  IOS_TESTFLIGHT_OUTPUT_ROOT: outputRoot,
+  IOS_ARCHIVE_PATH: join(outputRoot, 'AmmoPhone.xcarchive'),
+  IOS_EXPORT_PATH: join(outputRoot, 'export'),
+  IOS_EXPORT_OPTIONS_PLIST: join(outputRoot, 'ExportOptions.plist'),
 };
 for (const [key,value] of Object.entries(defaults)) process.env[key] ||= value;
-const mode = process.argv[2];
-if (!['--dry-run','--prepare','--upload'].includes(mode)) throw new Error('Choose --dry-run, --prepare, or --upload.');
-if (process.env.IOS_TESTFLIGHT_INTERNAL_ONLY !== '1') throw new Error('This script only exports and uploads internal TestFlight builds.');
 for (const key of ['APPLE_TEAM_ID', 'IOS_BUNDLE_ID', 'QI_APP_GROUP']) {
   if (!process.env[key]) throw new Error(`Set ${key} explicitly for your own signing identity.`);
 }
 if (!/^[A-Z0-9]{10}$/.test(process.env.APPLE_TEAM_ID)) throw new Error('Invalid Apple Team ID.');
 const config = {
+  mode: releaseMode,
+  expectedAudience: releaseMode === 'internal' ? 'INTERNAL_ONLY' : 'APP_STORE_ELIGIBLE',
   bundleId: process.env.IOS_BUNDLE_ID, teamId: process.env.APPLE_TEAM_ID,
   icloudContainer: process.env.QI_ICLOUD_CONTAINER || 'iCloud.' + process.env.IOS_BUNDLE_ID,
   version: marketingVersion, scheme: process.env.IOS_SCHEME,
   archivePath: resolve(root, process.env.IOS_ARCHIVE_PATH),
   exportPath: resolve(root, process.env.IOS_EXPORT_PATH),
   exportOptions: resolve(root, process.env.IOS_EXPORT_OPTIONS_PLIST),
+  receiptPath: join(root, outputRoot, 'prepared.json'),
+  exportSettings: exportOptions(process.env.APPLE_TEAM_ID, process.env.IOS_BUNDLE_ID),
 };
+if (releaseMode === 'external-candidate') {
+  const candidateRoot = resolve(root, outputRoot);
+  for (const path of [config.archivePath, config.exportPath, config.exportOptions, config.receiptPath, resolve(root, process.env.IOS_TESTFLIGHT_OUTPUT_ROOT)]) {
+    const within = relative(candidateRoot, path);
+    if (within === '..' || within.startsWith('../') || isAbsolute(within)) {
+      throw new Error('External candidate output paths must stay inside .build/TestFlight/external-candidate.');
+    }
+    let ancestor = root;
+    for (const part of relative(root, path).split('/')) {
+      ancestor = join(ancestor, part);
+      try {
+        if (lstatSync(ancestor).isSymbolicLink()) throw new Error('External candidate output paths must not use symbolic links.');
+      } catch (error) {
+        if (error.code !== 'ENOENT') throw error;
+      }
+    }
+  }
+}
 // Dry run is local, performs no ASC calls and creates no output files.
 if (mode === '--dry-run') { console.log(JSON.stringify(config, null, 2)); process.exit(0); }
 function command(exe,args,options={}) {
@@ -92,9 +116,10 @@ function existingBuilds(appID,version,buildNumber) {
   return listData(jsonCommand('asc',['builds','list','--app',appID,'--version',version,'--build-number',String(buildNumber),'--processing-state','all','--output','json']));
 }
 const revision=()=>command('git',['rev-parse','HEAD'],{stdio:'pipe',encoding:'utf8'});
-const receiptPath=join(root,'.build/TestFlight/prepared.json');
+const receiptPath=config.receiptPath;
 if(mode==='--upload') {
   const receipt=JSON.parse(readFileSync(receiptPath,'utf8'));
+  assertInternalRelease(receipt);
   if(receipt.commit!==revision() || command('git',['status','--porcelain'],{stdio:'pipe',encoding:'utf8'})) throw new Error('Prepared source must match clean HEAD.');
   if(receipt.internalOnly!==true || plist(config.exportOptions).testFlightInternalTestingOnly!==true ||
      createHash('sha256').update(readFileSync(config.exportOptions)).digest('hex')!==receipt.exportOptionsSha256) throw new Error('Prepared export is not bound to internal TestFlight options.');
@@ -112,7 +137,7 @@ if(mode==='--upload') {
 if(command('git',['status','--porcelain'],{stdio:'pipe',encoding:'utf8'})) throw new Error('Commit release inputs before archiving.');
 const appID=resolveStrictAscAppId(config.bundleId), buildNumber=resolveStrictBuildNumber(appID,config.version);
 const commit=revision();
-const options = exportOptions(config.teamId, config.bundleId);
+const options = config.exportSettings;
 command('/bin/mkdir',['-p',config.exportPath]);
 writeFileSync(config.exportOptions, JSON.stringify(options), {mode:0o600});
 command('/usr/bin/plutil',['-convert','xml1',config.exportOptions]);
@@ -122,11 +147,20 @@ command('xcodebuild',['-workspace',process.env.IOS_WORKSPACE,'-scheme',config.sc
 command('xcodebuild',['-exportArchive','-archivePath',config.archivePath,'-exportPath',config.exportPath,'-exportOptionsPlist',config.exportOptions]);
 const ipa=findExportedIPA(config.exportPath);
 verifyIPA(ipa,{bundleID:config.bundleId,version:config.version,buildNumber:String(buildNumber),teamID:config.teamId,appGroup:process.env.QI_APP_GROUP,icloudContainer:config.icloudContainer});
-const receipt={commit,appID,buildNumber:String(buildNumber),version:config.version,ipa,
-  sha256:createHash('sha256').update(readFileSync(ipa)).digest('hex'),internalOnly:true,
+const receipt={commit,appID,buildNumber:String(buildNumber),version:config.version,ipa,mode:releaseMode,
+  sha256:createHash('sha256').update(readFileSync(ipa)).digest('hex'),internalOnly:releaseMode === 'internal',
   exportOptionsSha256:createHash('sha256').update(readFileSync(config.exportOptions)).digest('hex')};
 writeFileSync(receiptPath,JSON.stringify(receipt,null,2)+'\n',{mode:0o600});
-console.log('Prepared and verified. Upload separately after release gates pass.');
+if (releaseMode === 'external-candidate') {
+  mkdirSync(join(root, '.build/ci'), {recursive:true});
+  writeFileSync(join(root, '.build/ci/testflight-candidate-receipt.json'), JSON.stringify({
+    mode: releaseMode, stage: 'prepared-only', commit, version: config.version, buildNumber: receipt.buildNumber,
+    expectedAudience: config.expectedAudience, ipaSha256: receipt.sha256, exportOptionsSha256: receipt.exportOptionsSha256,
+  }, null, 2)+'\n', {mode:0o600});
+  console.log('External candidate prepared and verified locally. Upload, distribution and Beta App Review remain disabled.');
+} else {
+  console.log('Prepared and verified. Upload separately after release gates pass.');
+}
 
 function plist(path) {
   return jsonCommand('/usr/bin/plutil',['-convert','json','-o','-',path]);

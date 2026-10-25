@@ -1,7 +1,7 @@
 name: Internal TestFlight
 
 # Dispatch this workflow on main. A tag never supplies the privileged workflow.
-# All following build/sign/upload/readback steps run automatically after approval.
+# Candidate preparation never uploads; internal uploads remain explicitly selected.
 on:
   workflow_dispatch:
     inputs:
@@ -15,6 +15,12 @@ on:
         type: choice
         options: [ios, macos]
         default: ios
+      distribution:
+        description: 'external-candidate prepares only; uploads remain internal-only'
+        required: true
+        type: choice
+        options: [internal, external-candidate]
+        default: internal
       publish:
         description: 'Upload to the existing internal TestFlight group after checks'
         required: true
@@ -39,10 +45,24 @@ jobs:
       version: ${{ steps.ref.outputs.version }}
       buildNumber: ${{ steps.ref.outputs.buildNumber }}
     steps:
-      - name: Reject unsupported platform before credentials or environment approval
+      - name: Reject unsupported release requests before credentials or environment approval
         env:
           PLATFORM: ${{ inputs.platform }}
+          DISTRIBUTION: ${{ inputs.distribution }}
+          PUBLISH: ${{ inputs.publish }}
         run: |
+          case "$DISTRIBUTION" in
+            internal|external-candidate) ;;
+            *) echo 'Choose internal or external-candidate distribution.' >&2; exit 1 ;;
+          esac
+          case "$PUBLISH" in
+            true|false) ;;
+            *) echo 'Publish must be an explicit boolean.' >&2; exit 1 ;;
+          esac
+          if [ "$DISTRIBUTION" = external-candidate ] && [ "$PUBLISH" != false ]; then
+            echo 'External candidates are prepare-only; upload and review submission remain disabled.' >&2
+            exit 1
+          fi
           if [ "$PLATFORM" != ios ]; then
             echo 'macOS TestFlight is blocked: AmmoDesktop is unsandboxed and reads local provider credentials. A separately designed sandboxed distribution target is required; see docs/github-actions.md.' >&2
             exit 1
@@ -75,6 +95,7 @@ jobs:
       ASC_INTERNAL_GROUP_ID: ${{ vars.ASC_INTERNAL_GROUP_ID }}
       TESTFLIGHT_ENABLED: ${{ vars.TESTFLIGHT_ENABLED }}
       IOS_BUILD_NUMBER: ${{ needs.release-selector.outputs.buildNumber }}
+      IOS_TESTFLIGHT_MODE: ${{ inputs.distribution }}
       CI_UPLOAD_AUTHORIZED: ${{ inputs.publish && 'true' || 'false' }}
       ASC_TELEMETRY_DISABLED: '1'
       DO_NOT_TRACK: '1'
@@ -121,7 +142,7 @@ jobs:
           mkdir -p .build/ci-bin
           ln -s "$PWD/scripts/ci/asc.mjs" .build/ci-bin/asc
           echo "$PWD/.build/ci-bin" >> "$GITHUB_PATH"
-      - name: Recheck selected ref and prepare verified internal-only IPA
+      - name: Recheck selected ref and prepare verified IPA for the selected mode
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ inputs.release_tag }}
@@ -130,6 +151,68 @@ jobs:
         run: |
           node scripts/ci/release-ref.mjs
           node scripts/testflight-ios.mjs --prepare
+      # This validation comes from the protected workflow, not the selected tag.
+      # Old tags that ignore the new mode cannot report candidate success.
+      - name: Verify external candidate receipt and artifact binding
+        if: ${{ inputs.distribution == 'external-candidate' }}
+        env:
+          RELEASE_COMMIT: ${{ needs.release-selector.outputs.commit }}
+          RELEASE_VERSION: ${{ needs.release-selector.outputs.version }}
+        run: |
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          import {createHash} from 'node:crypto';
+          import {spawnSync} from 'node:child_process';
+          import {lstatSync, readdirSync, readFileSync} from 'node:fs';
+          import {dirname, resolve} from 'node:path';
+          const root = process.cwd();
+          const candidate = resolve('.build/TestFlight/external-candidate');
+          const localPath = path => {
+            for (let ancestor = path; ancestor !== root; ancestor = dirname(ancestor)) {
+              assert.equal(lstatSync(ancestor).isSymbolicLink(), false, 'Candidate paths must not alias another artifact.');
+            }
+          };
+          const read = path => {
+            localPath(resolve(path));
+            try { return JSON.parse(readFileSync(path, 'utf8')); }
+            catch { throw new Error('Candidate receipt is unavailable or invalid JSON.'); }
+          };
+          const prepared = read(candidate + '/prepared.json');
+          const receipt = read('.build/ci/testflight-candidate-receipt.json');
+          const expected = {commit: process.env.RELEASE_COMMIT, version: process.env.RELEASE_VERSION,
+            buildNumber: process.env.IOS_BUILD_NUMBER};
+          assert.match(expected.commit, /^[a-f0-9]{40}$/);
+          assert.match(expected.version, /^\d+\.\d+\.\d+$/);
+          assert.match(expected.buildNumber, /^[1-9]\d*$/);
+          assert.equal(process.env.IOS_TESTFLIGHT_MODE, 'external-candidate');
+          assert.ok(prepared?.mode === 'external-candidate', 'Prepared mode differs from candidate request.');
+          assert.ok(prepared.internalOnly === false, 'Prepared candidate must not be internal-only.');
+          for (const [key, value] of Object.entries(expected)) assert.ok(prepared[key] === value, 'Prepared identity differs from selector.');
+          localPath(candidate + '/export');
+          const exported = readdirSync(candidate + '/export', {withFileTypes: true}).filter(entry => /\.ipa$/i.test(entry.name));
+          assert.equal(exported.length, 1);
+          assert.ok(exported[0].isFile());
+          const ipa = resolve(candidate, 'export', exported[0].name);
+          assert.ok(typeof prepared.ipa === 'string' && resolve(prepared.ipa) === ipa, 'Prepared IPA path differs from candidate export.');
+          const options = candidate + '/ExportOptions.plist';
+          for (const path of [ipa, options]) localPath(path);
+          const digest = path => createHash('sha256').update(readFileSync(path)).digest('hex');
+          assert.ok(prepared.sha256 === digest(ipa), 'Prepared IPA hash differs from actual candidate.');
+          assert.ok(prepared.exportOptionsSha256 === digest(options), 'Prepared export hash differs from actual options.');
+          const decoded = spawnSync('python3', ['-c',
+            "import json,plistlib,sys; p=plistlib.loads(sys.stdin.buffer.read()); json.dump({k:p.get(k) for k in ('method','testFlightInternalTestingOnly')},sys.stdout)"],
+            {input: readFileSync(options), encoding: 'utf8', timeout: 10000});
+          assert.equal(decoded.status, 0, 'Candidate export options must be a valid plist.');
+          const exportSettings = JSON.parse(decoded.stdout);
+          assert.ok(exportSettings.method === 'app-store-connect', 'Candidate requires App Store Connect export.');
+          assert.ok(exportSettings.testFlightInternalTestingOnly === false, 'Candidate export is still internal-only.');
+          const expectedReceipt = {mode: 'external-candidate', stage: 'prepared-only', ...expected,
+            expectedAudience: 'APP_STORE_ELIGIBLE', ipaSha256: prepared.sha256,
+            exportOptionsSha256: prepared.exportOptionsSha256};
+          assert.ok(receipt && Object.keys(receipt).length === Object.keys(expectedReceipt).length, 'Unexpected candidate receipt fields.');
+          for (const [key, value] of Object.entries(expectedReceipt)) assert.ok(receipt[key] === value, 'Candidate receipt differs from verified artifact.');
+          console.log('Verified candidate preparation only; no Apple upload or review occurred.');
+          NODE
       - name: Upload once through existing artifact-bound gates
         if: ${{ inputs.publish }}
         env:
@@ -149,9 +232,10 @@ jobs:
       - name: Publish non-sensitive verification receipt and fresh simulator screenshot
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: internal-testflight-verification-${{ needs.release-selector.outputs.buildNumber }}
+          name: ${{ inputs.distribution }}-testflight-verification-${{ needs.release-selector.outputs.buildNumber }}
           path: |
             .build/ci/testflight-receipt.json
+            .build/ci/testflight-candidate-receipt.json
             .build/ci/ios-simulator-smoke.png
             .build/ci/simulator-smoke.json
           include-hidden-files: true

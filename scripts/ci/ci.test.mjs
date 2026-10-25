@@ -1,12 +1,47 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {exportOptions} from './signing-options.mjs';
+import {assertInternalRelease, distributionMode, exportOptions} from './signing-options.mjs';
 import {parseTag, protectsTag, successfulChecks, verifyReleaseEnvironment} from './release-ref.mjs';
 import {assertBuildUnused, builds, internalGroup, list} from './asc.mjs';
+
+test('distribution mode defaults to internal and requires an explicit candidate selection', () => {
+  assert.equal(distributionMode({}), 'internal');
+  assert.equal(distributionMode({IOS_TESTFLIGHT_MODE: 'internal'}), 'internal');
+  assert.equal(distributionMode({IOS_TESTFLIGHT_INTERNAL_ONLY: '1'}), 'internal');
+  assert.equal(distributionMode({IOS_TESTFLIGHT_MODE: 'external-candidate'}), 'external-candidate');
+  for (const mode of ['', 'external', 'EXTERNAL', 'app-store', ' internal', 'external-candidate\n']) {
+    assert.throws(() => distributionMode({IOS_TESTFLIGHT_MODE: mode}), `invalid mode ${JSON.stringify(mode)}`);
+  }
+  for (const legacy of ['0', '', 'true', 'false']) {
+    assert.throws(() => distributionMode({IOS_TESTFLIGHT_INTERNAL_ONLY: legacy}), `legacy flag ${JSON.stringify(legacy)}`);
+  }
+  for (const legacy of ['0', '1', '']) {
+    assert.throws(() => distributionMode({IOS_TESTFLIGHT_MODE: 'external-candidate', IOS_TESTFLIGHT_INTERNAL_ONLY: legacy}));
+  }
+});
+
+test('internal release guard binds both configured mode and prepared receipt without changing either', () => {
+  const historical = {internalOnly: true};
+  const current = {mode: 'internal', internalOnly: true};
+  assert.doesNotThrow(() => assertInternalRelease(undefined, {}));
+  assert.doesNotThrow(() => assertInternalRelease(historical, {}));
+  assert.doesNotThrow(() => assertInternalRelease(current, {IOS_TESTFLIGHT_MODE: 'internal'}));
+  assert.deepEqual(historical, {internalOnly: true});
+  assert.deepEqual(current, {mode: 'internal', internalOnly: true});
+  for (const receipt of [undefined, historical, current, {mode: 'external-candidate', internalOnly: false}]) {
+    assert.throws(() => assertInternalRelease(receipt, {IOS_TESTFLIGHT_MODE: 'external-candidate'}));
+  }
+  for (const receipt of [{}, {internalOnly: false}, {internalOnly: 'true'},
+    {mode: 'external-candidate', internalOnly: false}, {mode: 'external-candidate', internalOnly: true},
+    {mode: '', internalOnly: true}, {mode: 'unknown', internalOnly: true}]) {
+    assert.throws(() => assertInternalRelease(receipt, {}));
+  }
+});
 
 test('manual export uses exactly the app and widget profiles and retains internal-only', () => {
   const defaults = exportOptions('ABCDEFGHIJ', 'org.example.ammo', {});
   assert.equal(defaults.signingStyle, 'automatic');
+  assert.equal(defaults.testFlightInternalTestingOnly, true);
   const profiles = {'org.example.ammo': 'App Store App', 'org.example.ammo.widgets': 'App Store Widget'};
   const options = exportOptions('ABCDEFGHIJ', 'org.example.ammo', {IOS_SIGNING_STYLE: 'manual', IOS_PROVISIONING_PROFILES: JSON.stringify(profiles)});
   assert.equal(options.signingStyle, 'manual');
@@ -16,6 +51,26 @@ test('manual export uses exactly the app and widget profiles and retains interna
     assert.throws(() => exportOptions('ABCDEFGHIJ', 'org.example.ammo', {IOS_SIGNING_STYLE: 'manual', IOS_PROVISIONING_PROFILES: JSON.stringify(invalid)}), /exact app and widget/);
   }
   assert.throws(() => exportOptions('ABCDEFGHIJ', 'org.example.ammo', {IOS_SIGNING_STYLE: 'external'}), /explicit manual/);
+});
+
+test('candidate export changes audience only and keeps exact distribution signing profiles', () => {
+  const profiles = {'org.example.ammo': 'App Store App', 'org.example.ammo.widgets': 'App Store Widget'};
+  const env = {IOS_SIGNING_STYLE: 'manual', IOS_PROVISIONING_PROFILES: JSON.stringify(profiles)};
+  const internal = exportOptions('ABCDEFGHIJ', 'org.example.ammo', env);
+  const candidateEnv = {...env, IOS_TESTFLIGHT_MODE: 'external-candidate'};
+  const candidate = exportOptions('ABCDEFGHIJ', 'org.example.ammo', candidateEnv);
+  assert.deepEqual(candidate, {...internal, testFlightInternalTestingOnly: false});
+  assert.equal(candidate.method, 'app-store-connect');
+  assert.equal(candidate.signingCertificate, 'Apple Distribution');
+  for (const invalid of [{}, {'org.example.ammo': 'App'}, {...profiles, other: 'Other'},
+    {...profiles, 'org.example.ammo': ''}, {...profiles, 'org.example.ammo.widgets': 'unsafe\nname'}]) {
+    assert.throws(() => exportOptions('ABCDEFGHIJ', 'org.example.ammo', {
+      ...candidateEnv, IOS_PROVISIONING_PROFILES: JSON.stringify(invalid),
+    }), /exact app and widget/);
+  }
+  assert.throws(() => exportOptions('ABCDEFGHIJ', 'org.example.ammo', {
+    ...candidateEnv, IOS_SIGNING_STYLE: 'external',
+  }), /explicit manual/);
 });
 
 test('release selector rejects ambiguous tags and build-number injection', () => {

@@ -3,6 +3,7 @@ import {execFileSync} from 'node:child_process';
 import {createHash} from 'node:crypto';
 import {mkdirSync, readFileSync, writeFileSync} from 'node:fs';
 import {api, assertBuildUnused, builds, internalGroup, list} from './asc.mjs';
+import {assertInternalRelease, verifyInternalArtifact} from './signing-options.mjs';
 
 const read = path => JSON.parse(readFileSync(path, 'utf8'));
 const digest = value => createHash('sha256').update(value).digest('hex');
@@ -14,8 +15,10 @@ async function verifyGroup(receipt) {
 }
 
 async function gates() {
+  assertInternalRelease();
   if (process.env.TESTFLIGHT_ENABLED !== 'true' || process.env.CI_UPLOAD_AUTHORIZED !== 'true') throw new Error('Maintainer has not enabled protected internal releases.');
   const prepared = read('.build/TestFlight/prepared.json');
+  verifyInternalArtifact(prepared);
   const ref = read('.build/ci/release-ref.json');
   const smoke = read('.build/ci/simulator-smoke.json');
   if (prepared.commit !== ref.commit || prepared.version !== ref.version || prepared.buildNumber !== ref.buildNumber || prepared.internalOnly !== true) throw new Error('Prepared artifact differs from protected tag.');
@@ -45,7 +48,9 @@ async function gates() {
 }
 
 async function readback() {
+  assertInternalRelease();
   const prepared = read('.build/TestFlight/prepared.json');
+  verifyInternalArtifact(prepared);
   const ref = read('.build/ci/release-ref.json');
   const groupID = process.env.ASC_INTERNAL_GROUP_ID;
   const deadline = Date.now() + 25 * 60 * 1000;

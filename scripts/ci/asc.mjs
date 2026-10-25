@@ -6,6 +6,7 @@ import {readFileSync} from 'node:fs';
 import {resolve} from 'node:path';
 import {spawnSync} from 'node:child_process';
 import {pathToFileURL} from 'node:url';
+import {assertInternalRelease, verifyInternalArtifact} from './signing-options.mjs';
 
 const origin = 'https://api.appstoreconnect.apple.com';
 const encode = value => Buffer.from(JSON.stringify(value)).toString('base64url');
@@ -93,8 +94,10 @@ async function main(args) {
   } else if (resource === 'builds' && operation === 'list') {
     console.log(JSON.stringify({data: await builds(flags['--app'], flags['--version'], flags['--build-number'])}));
   } else if (resource === 'builds' && operation === 'upload') {
+    assertInternalRelease();
     if (process.env.CI_UPLOAD_AUTHORIZED !== 'true') throw new Error('Upload requires the protected release workflow.');
     const prepared = JSON.parse(readFileSync('.build/TestFlight/prepared.json', 'utf8'));
+    verifyInternalArtifact(prepared);
     if (prepared.appID !== flags['--app'] || !flags['--ipa'] || resolve(prepared.ipa) !== resolve(flags['--ipa'])) {
       throw new Error('Upload request differs from the prepared artifact.');
     }

@@ -1,4 +1,4 @@
-# Apple builds and internal TestFlight
+# Apple builds and TestFlight preparation
 
 The repository contains two workflows. Signing credentials are optional for source
 checks and unsigned builds. No credentials are included in this repository.
@@ -10,6 +10,7 @@ checks and unsigned builds. No credentials are included in this repository.
 | Checks / macos | Same | Swift tests and an unsigned native macOS app |
 | Checks / secrets | Same | Redacted Gitleaks scan of actual checkout and complete fetched Git history |
 | Internal TestFlight / ios | Explicit dispatch on protected `main`, approved environment, reviewed immutable tag | Signed internal-only IPA; optional upload; exact Apple processing and existing internal-group readback |
+| Internal TestFlight / ios, `external-candidate` | Same protected dispatch and approval, with `publish=false` | Signed candidate preparation only; uploading, distribution and Beta App Review are disabled |
 | Internal TestFlight / macos | Explicit dispatch | Stops before credentials, reporting the current sandbox blocker |
 
 `Ammo-iOS-Simulator.zip` cannot install on a physical iPhone. The macOS artifact is
@@ -17,6 +18,11 @@ unsigned; distribution signing, notarization, and Mac App Store acceptance are
 separate work. Build artifacts expire after seven days. The TestFlight workflow
 publishes only a verification receipt and an empty fresh-simulator screenshot,
 not signing assets, provisioning profiles, signed IPA files, or raw ASC responses.
+Candidate runs also publish a preparation receipt containing the selected mode,
+commit, version/build, expected audience and artifact hashes. It is not an Apple
+processing, review or installation receipt. The protected workflow validates this
+receipt against its selector and the actual IPA/export options before publishing
+it; an older tag that ignores candidate mode fails this check.
 
 ## Runner and toolchain costs
 
@@ -136,7 +142,8 @@ certificates, profiles, bundle IDs, groups, users, or invitations.
    ```
 
 3. Dispatch **Internal TestFlight** on `main`, choose `ios`, and supply the exact tag.
-   Leave `publish=false` for a signing/archive/export rehearsal. Choose `publish=true`
+   Leave `distribution=internal` (the default) and `publish=false` for an internal
+   signing/archive/export rehearsal. Choose `publish=true`
    to authorize the automated upload and linkage to the configured existing internal
    group. Approve the protected environment using an existing authorized reviewer.
 
@@ -144,6 +151,42 @@ certificates, profiles, bundle IDs, groups, users, or invitations.
    gh workflow run testflight-internal.yml --ref main \
      -f release_tag=testflight/ios/vVERSION-bBUILD -f platform=ios -F publish=true
    ```
+
+### External candidate preparation
+
+Select `distribution=external-candidate` with `publish=false` to prepare a candidate
+using the existing signed app/widget targets and protected environment. The
+selector rejects candidate uploads before environment approval or signing. No
+new secret, environment, reviewer, profile or access grant is required by this
+mode; existing signing assets must still pass all normal checks.
+
+The local command selects the same mode with `IOS_TESTFLIGHT_MODE=external-candidate`
+and supports only `--dry-run` or `--prepare`. Dry-run reads no ASC credential,
+contacts no service and writes no artifact. Prepare uses the existing approved
+signing and ASC lookup flow; do not run it as a substitute for dry-run. Candidate
+archive/export/receipt paths stay inside `.build/TestFlight/external-candidate/`
+and cannot alias the internal paths through a symbolic link. The old
+`IOS_TESTFLIGHT_INTERNAL_ONLY=0` flag does not enable candidates; legacy flags must
+not be combined with candidate mode.
+
+Candidate exports use `testFlightInternalTestingOnly=false`, while the default
+internal mode retains `true`. [Apple's audience enum](https://developer.apple.com/documentation/appstoreconnectapi/buildaudiencetype)
+calls the expected non-internal-only audience `APP_STORE_ELIGIBLE`; this is an expectation until Apple processes a future
+authorized upload, and does not mean App Store publication or Beta App Review
+approval. All current upload adapters and group readback entry points reject
+candidate configuration or receipts, including when called directly. Internal
+evidence gates cannot authorize an external candidate. The CI upload and readback
+entry points also check the actual internal artifact paths, IPA and export hashes,
+and the internal-only export value before any ASC request or group write; changing
+receipt labels alone cannot bypass these checks.
+
+Actual external uploading and review remain separate unfinished work. They need
+the real review contact, working reviewer access, privacy and export-compliance
+facts, required device evidence and a separately reviewed upload/review path.
+This preparation mode does not create human verification claims, invite testers,
+link groups, open a public testing link or submit a build for review.
+
+### Shared checks and internal uploads
 
 The pipeline checks the tag object, main ancestry, version, full CI outcome, and
 environment restrictions before secrets are used, and rechecks immediately before
