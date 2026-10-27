@@ -18,7 +18,8 @@
   },
   "overrides": {
     "miniflare@5.20260930.0-alpha": {
-      "sharp": "0.35.5"
+      "sharp": "0.35.5",
+      "undici": "7.30.1"
     }
   }
 }
