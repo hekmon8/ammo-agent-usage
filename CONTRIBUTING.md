@@ -34,8 +34,8 @@ Use pinned dependencies and update lock files together. Run `npm audit` in both
 Node package directories; review development-tool findings as well as runtime
 findings. Scan public exports with Gitleaks and review its findings without
 printing secret values. Do not add broad scanner exclusions for tests.
-Worker tooling is pinned to Wrangler 4.145.0, whose Miniflare dependency uses
-Undici 7.29.1. Keep the Worker audit gate enabled when updating this toolchain;
+Worker tooling is pinned to Wrangler 4.153.0, whose Miniflare dependency uses
+Undici 7.30.1. Keep the Worker audit gate enabled when updating this toolchain;
 older pins can reintroduce high-severity transport advisories.
 Retain upstream notices and update THIRD_PARTY_NOTICES.md when dependencies change.
 Only contribute code and assets you have the right to distribute under the
