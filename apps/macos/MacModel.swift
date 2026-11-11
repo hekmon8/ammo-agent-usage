@@ -20,6 +20,7 @@ enum ConnectionMethodKind: Sendable {
     case workbuddyLocalLogin
     case zcodeLocalLogin
     case githubCLILogin
+    case antigravityLocalLogin
     case nativeProvider
 }
 
@@ -129,6 +130,7 @@ struct ProviderConnectionSummary: Identifiable, Sendable {
         case .workbuddyLocalLogin: L("mac.method.localWorkBuddy")
         case .zcodeLocalLogin: L("mac.method.localZCode")
         case .githubCLILogin: L("mac.method.localGitHubCLI")
+        case .antigravityLocalLogin: L("mac.method.localAntigravity")
         case .nativeProvider: L("mac.method.standalone")
         }
     }
@@ -646,6 +648,14 @@ final class MacModel: ObservableObject {
                     id: "local-claude-" + String(probe.identityFingerprint.prefix(24)),
                     kind: .claudeLocalLogin, providerID: "claude", accountID: probe.accountID,
                     accountAlias: alias, expectedIdentity: probe.identityFingerprint)
+            case "antigravity":
+                let alias = trimmed.isEmpty ? "Antigravity" : trimmed
+                guard alias.count <= 48 else { throw ProviderFailure.parseChanged }
+                let probe = try await AntigravityLocalProvider.probe(alias: alias)
+                record = ProviderConnectionRecord(
+                    id: "local-antigravity-" + String(probe.identityFingerprint.prefix(24)),
+                    kind: .antigravityLocalLogin, providerID: "antigravity", accountID: probe.accountID,
+                    accountAlias: alias, expectedIdentity: probe.identityFingerprint)
             case "workbuddy":
                 let alias = trimmed.isEmpty ? "WorkBuddy" : trimmed
                 guard alias.count <= 48 else { throw ProviderFailure.parseChanged }
@@ -1055,6 +1065,10 @@ final class MacModel: ObservableObject {
             return ClaudeLocalProvider(accountID: record.accountID, alias: record.accountAlias,
                                        expectedIdentity: record.expectedIdentity)
         }
+        if record.kind == .antigravityLocalLogin {
+            return AntigravityLocalProvider(accountID: record.accountID, alias: record.accountAlias,
+                                           expectedIdentity: record.expectedIdentity)
+        }
         if record.kind == .workbuddyLocalLogin {
             return WorkBuddyLocalProvider(accountID: record.accountID, alias: record.accountAlias,
                                           expectedIdentity: record.expectedIdentity)
@@ -1077,7 +1091,7 @@ final class MacModel: ObservableObject {
             return try NativeProvider(providerID: record.providerID, accountID: record.accountID,
                 alias: record.accountAlias, expectedIdentity: record.expectedIdentity,
                 credential: try providerVault.load(providerID: record.providerID, reference: instanceID))
-        case .codexLocalLogin, .grokLocalLogin, .claudeLocalLogin, .workbuddyLocalLogin, .zcodeLocalLogin, .githubCLILogin:
+        case .codexLocalLogin, .grokLocalLogin, .claudeLocalLogin, .workbuddyLocalLogin, .zcodeLocalLogin, .githubCLILogin, .antigravityLocalLogin:
             throw ProviderFailure.authRequired // Handled above.
         }
     }
@@ -1192,6 +1206,7 @@ final class MacModel: ObservableObject {
             case .workbuddyLocalLogin: method = .workbuddyLocalLogin
             case .zcodeLocalLogin: method = .zcodeLocalLogin
             case .githubCLILogin: method = .githubCLILogin
+            case .antigravityLocalLogin: method = .antigravityLocalLogin
             case .nativeProvider: method = .nativeProvider
             }
             return ProviderConnectionSummary(

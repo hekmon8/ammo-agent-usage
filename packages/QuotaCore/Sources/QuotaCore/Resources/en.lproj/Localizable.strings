@@ -517,6 +517,7 @@
 "settings.agy.importFailed" = "Could not import the authorization. Choose an OAuth file that only you can read, has not expired, and includes the account's projects.";
 "settings.agy.importHelp" = "Select an existing Antigravity OAuth authorization file, or paste the authorization JSON. It is stored on this Mac after successful verification; re-import after it expires.";
 "settings.agy.pasteInstead" = "Paste Authorization Instead";
+"settings.agy.localHelp" = "Uses this Mac's agy sign-in to read Gemini and Claude/GPT quotas. No authorization file needed. Requires agy 1.1.11 or later; run agy in a terminal and sign in first. Ammo verifies the Google account using its local credential, but does not save it. Renewal stays with agy; switching accounts requires reconnecting here.";
 "settings.codex.discovering" = "Looking for Codex…";
 "settings.codex.found" = "Codex found";
 "settings.codex.nativeHelp" = "Codex will sign this account in separately in your browser; existing accounts keep their own sign-ins.";
@@ -662,6 +663,7 @@
 "mac.method.localCodex" = "On-device Codex sign-in (read-only)";
 "mac.method.localGrok" = "On-device Grok sign-in";
 "mac.method.localClaude" = "On-device Claude Code sign-in";
+"mac.method.localAntigravity" = "On-device Antigravity CLI sign-in";
 "mac.method.localWorkBuddy" = "On-device WorkBuddy sign-in";
 "mac.method.localZCode" = "On-device ZCode sign-in";
 "phone.monitor.chooseWindow" = "Choose a Window";

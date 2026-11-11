@@ -9,11 +9,12 @@ public enum ProviderConnectionKind: String, Codable, Sendable {
     case workbuddyLocalLogin = "workbuddy_local_login"
     case zcodeLocalLogin = "zcode_local_login"
     case githubCLILogin = "github_cli_login"
+    case antigravityLocalLogin = "antigravity_local_login"
 
     /// Ambient-login records own no instance profile; the standalone-pause
     /// rule must not park them.
     public var usesLocalLogin: Bool {
-        self == .codexLocalLogin || self == .grokLocalLogin || self == .claudeLocalLogin || self == .workbuddyLocalLogin || self == .zcodeLocalLogin || self == .githubCLILogin
+        self == .codexLocalLogin || self == .grokLocalLogin || self == .claudeLocalLogin || self == .workbuddyLocalLogin || self == .zcodeLocalLogin || self == .githubCLILogin || self == .antigravityLocalLogin
     }
 }
 
@@ -109,6 +110,8 @@ public struct ProviderConnectionRecord: Codable, Sendable {
             }
         case .githubCLILogin:
             guard providerID == "github-actions", executable == nil, instanceID == nil else { throw ProviderFailure.parseChanged }
+        case .antigravityLocalLogin:
+            guard providerID == "antigravity", executable == nil, instanceID == nil else { throw ProviderFailure.parseChanged }
         case .zcodeLocalLogin:
             guard providerID == "zcode", executable == nil, instanceID == nil else {
                 throw ProviderFailure.parseChanged

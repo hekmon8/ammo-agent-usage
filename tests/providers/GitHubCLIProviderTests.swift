@@ -115,6 +115,10 @@ final class GitHubCLIProviderTests: XCTestCase, @unchecked Sendable {
         XCTAssertTrue(GitHubCLIProcess.secureLocation(second))
         try FileManager.default.createSymbolicLink(at: first, withDestinationURL: second)
         XCTAssertFalse(GitHubCLIProcess.secureLocation(first))
+        let deny = Process(); deny.executableURL = URL(fileURLWithPath: "/bin/chmod")
+        deny.arguments = ["+a", "everyone deny delete", root.path]
+        try deny.run(); deny.waitUntilExit(); XCTAssertEqual(deny.terminationStatus, 0)
+        XCTAssertTrue(GitHubCLIProcess.secureLocation(file), "A deny entry must not be treated as a write grant")
         let chmod = Process(); chmod.executableURL = URL(fileURLWithPath: "/bin/chmod")
         chmod.arguments = ["+a", "everyone allow write,delete_child", root.path]
         try chmod.run(); chmod.waitUntilExit(); XCTAssertEqual(chmod.terminationStatus, 0)

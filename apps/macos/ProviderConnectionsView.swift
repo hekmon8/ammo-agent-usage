@@ -341,6 +341,8 @@ struct AddProviderAccountView: View {
                             Text(L("billing.github.cli.details")).studioType(.caption).foregroundStyle(.secondary)
                         }
                     }
+                } else if selectedProvider == "antigravity" {
+                    antigravityImportForm
                 } else {
                     SecureField(credentialLabel(credentialKind), text: $credentialValue)
                         .textFieldStyle(.roundedBorder)
@@ -380,10 +382,8 @@ struct AddProviderAccountView: View {
                     }
                   }
                 }
-                if selectedProvider != "antigravity" {
-                  SecureField(credentialLabel(credentialKind), text: $credentialValue)
+                SecureField(credentialLabel(credentialKind), text: $credentialValue)
                     .textFieldStyle(.roundedBorder)
-                }
                 if let guide = credentialGuide {
                     VStack(alignment: .leading, spacing: 7) {
                         Label(L("settings.credential.guide.title"), systemImage: "book.page")
@@ -418,27 +418,8 @@ struct AddProviderAccountView: View {
                 if selectedProvider == "opencodego" {
                     TextField(L("settings.opencodego.workspacePlaceholder"), text: $workspaceID).textFieldStyle(.roundedBorder)
                 }
-                if selectedProvider == "antigravity" {
-                    Text(L("settings.agy.importHelp"))
-                        .studioType(.body).foregroundStyle(.secondary)
-                    HStack {
-                        Button(L("settings.agy.chooseAuthFile")) { chooseOAuthFile() }
-                        if let importedOAuthFile {
-                            Label(importedOAuthFile.lastPathComponent, systemImage: "doc.badge.checkmark")
-                                .studioType(.caption)
-                            Button(L("settings.agy.pasteInstead")) { self.importedOAuthFile = nil }
-                        }
-                    }
-                    if importedOAuthFile == nil {
-                        SecureField(L("settings.credential.oauthJSON"), text: $credentialValue)
-                            .textFieldStyle(.roundedBorder)
-                    }
-                    Text(L("settings.credential.antigravityHelp"))
-                        .studioType(.caption).foregroundStyle(.secondary)
-                } else {
-                    Text(L("settings.credential.genericHelp"))
-                        .studioType(.caption).foregroundStyle(.secondary)
-                }
+                Text(L("settings.credential.genericHelp"))
+                    .studioType(.caption).foregroundStyle(.secondary)
             }
             if !model.providerConnectionError.isEmpty {
                 Label(model.providerConnectionError.text, systemImage: "exclamationmark.circle")
@@ -448,13 +429,35 @@ struct AddProviderAccountView: View {
         }
     }
 
-    private var hasLocalLogin: Bool { selectedProvider == "github-actions" || selectedProvider == "grok" || selectedProvider == "claude" || selectedProvider == "workbuddy" || selectedProvider == "zcode" }
+    private var antigravityImportForm: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(L("settings.agy.importHelp"))
+                .studioType(.body).foregroundStyle(.secondary)
+            HStack {
+                Button(L("settings.agy.chooseAuthFile")) { chooseOAuthFile() }
+                if let importedOAuthFile {
+                    Label(importedOAuthFile.lastPathComponent, systemImage: "doc.badge.checkmark")
+                        .studioType(.caption)
+                    Button(L("settings.agy.pasteInstead")) { self.importedOAuthFile = nil }
+                }
+            }
+            if importedOAuthFile == nil {
+                SecureField(L("settings.credential.oauthJSON"), text: $credentialValue)
+                    .textFieldStyle(.roundedBorder)
+            }
+            Text(L("settings.credential.antigravityHelp"))
+                .studioType(.caption).foregroundStyle(.secondary)
+        }
+    }
+
+    private var hasLocalLogin: Bool { selectedProvider == "github-actions" || selectedProvider == "grok" || selectedProvider == "claude" || selectedProvider == "workbuddy" || selectedProvider == "zcode" || selectedProvider == "antigravity" }
 
     private var localHelpKey: String {
         switch selectedProvider {
         case "github-actions": "billing.github.cli.help"
         case "claude": "settings.claude.localHelp"
         case "workbuddy": "settings.workbuddy.localHelp"
+        case "antigravity": "settings.agy.localHelp"
         default: "settings.grok.localHelp"
         }
     }

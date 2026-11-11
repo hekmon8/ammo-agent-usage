@@ -517,6 +517,7 @@
 "settings.agy.importFailed" = "无法导入授权。请选择仅自己可读、未过期且包含账号项目的 OAuth 文件。";
 "settings.agy.importHelp" = "选择已有的 Antigravity OAuth 授权文件，或粘贴授权 JSON。验证成功后保存在本机；到期后需重新导入。";
 "settings.agy.pasteInstead" = "改为粘贴授权";
+"settings.agy.localHelp" = "使用本机 agy 的已有登录读取 Gemini 与 Claude/GPT 额度，无需寻找授权文件。需要 agy 1.1.11 或更新版本；请先在终端运行 agy 并登录。Ammo 会读取本机凭据向 Google 核验账号，但不保存凭据；续期由 agy 处理。切换账号后需在这里重新连接。";
 "settings.codex.discovering" = "正在查找 Codex…";
 "settings.codex.found" = "已找到 Codex";
 "settings.codex.nativeHelp" = "将在浏览器中为此账号单独登录 Codex，已有账号继续使用各自的登录。";
@@ -662,6 +663,7 @@
 "mac.method.localCodex" = "本机 Codex 登录（只读）";
 "mac.method.localGrok" = "本机 Grok 登录";
 "mac.method.localClaude" = "本机 Claude Code 登录";
+"mac.method.localAntigravity" = "本机 Antigravity CLI 登录";
 "mac.method.localWorkBuddy" = "本机 WorkBuddy 登录";
 "mac.method.localZCode" = "本机 ZCode 登录";
 "phone.monitor.chooseWindow" = "选择窗口";

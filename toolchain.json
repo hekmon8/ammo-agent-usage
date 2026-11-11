@@ -19,7 +19,7 @@
       "lock": "Package.resolved"
     }
   ],
-  "wrangler": "4.145.0",
+  "wrangler": "4.153.0",
   "wranglerStatus": "local-types-push-http-validated",
   "xcodegen": "2.43.0"
 }

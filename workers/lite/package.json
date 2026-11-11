@@ -14,7 +14,7 @@
   },
   "devDependencies": {
     "typescript": "5.9.3",
-    "wrangler": "4.145.0"
+    "wrangler": "4.153.0"
   },
   "overrides": {
     "miniflare@5.20260930.0-alpha": {
