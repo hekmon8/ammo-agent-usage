@@ -95,8 +95,11 @@ enum GitHubCLIProcess {
             var tag = acl_tag_t(rawValue: 0)
             var set: acl_permset_t?
             var mask: acl_permset_mask_t = 0
-            guard acl_get_tag_type(entry, &tag) == 0, acl_get_permset(entry, &set) == 0,
-                  acl_get_permset_mask_np(set, &mask) == 0 else { return true }
+            guard acl_get_tag_type(entry, &tag) == 0, acl_get_permset(entry, &set) == 0 else { return true }
+            // A standard home directory has "everyone deny delete". macOS cannot
+            // export that entry's mask, and a deny entry does not grant write.
+            if tag == ACL_EXTENDED_DENY { continue }
+            guard acl_get_permset_mask_np(set, &mask) == 0 else { return true }
             if tag == ACL_EXTENDED_ALLOW && UInt64(mask) & writes != 0 { return true }
         }
         return false
@@ -118,20 +121,23 @@ enum GitHubCLIProcess {
 
     static func run(binary: URL, arguments: [String], timeout: TimeInterval = 15,
                     verifyExecutableBeforeSpawn: Bool = false,
-                    maxBytes: Int = 2_162_688) async throws -> Result {
+                    maxBytes: Int = 2_162_688, environment: [String: String]? = nil,
+                    workingDirectory: URL? = nil) async throws -> Result {
         let cancellation = GitHubCLICancellation()
         return try await withTaskCancellationHandler {
             try await Task.detached {
                 try waitOut(binary: binary, arguments: arguments, timeout: timeout,
-                            verifyExecutable: verifyExecutableBeforeSpawn, maxBytes: maxBytes, cancellation: cancellation)
+                            verifyExecutable: verifyExecutableBeforeSpawn, maxBytes: maxBytes,
+                            environment: environment, workingDirectory: workingDirectory, cancellation: cancellation)
             }.value
         } onCancel: { cancellation.cancel() }
     }
 
     private static func waitOut(binary: URL, arguments: [String], timeout: TimeInterval,
                                 verifyExecutable: Bool,
-                                maxBytes: Int, cancellation: GitHubCLICancellation) throws -> Result {
-        guard binary.isFileURL, binary.path.hasPrefix("/"), timeout > 0, timeout <= 30,
+                                maxBytes: Int, environment: [String: String]?, workingDirectory: URL?,
+                                cancellation: GitHubCLICancellation) throws -> Result {
+        guard binary.isFileURL, binary.path.hasPrefix("/"), timeout > 0, timeout <= 90,
               maxBytes > 0, maxBytes <= 2_162_688 else { throw ProviderFailure.permissionDenied }
         if cancellation.cancelled { throw ProviderFailure.cancelled }
         var checked = stat()
@@ -151,6 +157,12 @@ enum GitHubCLIProcess {
         var actions: posix_spawn_file_actions_t?
         guard posix_spawn_file_actions_init(&actions) == 0 else { throw ProviderFailure.network }
         defer { posix_spawn_file_actions_destroy(&actions) }
+        if let workingDirectory {
+            guard workingDirectory.isFileURL,
+                  posix_spawn_file_actions_addchdir_np(&actions, workingDirectory.path) == 0 else {
+                throw ProviderFailure.permissionDenied
+            }
+        }
         guard posix_spawn_file_actions_adddup2(&actions, nullFD, STDIN_FILENO) == 0,
               posix_spawn_file_actions_adddup2(&actions, output[1], STDOUT_FILENO) == 0,
               posix_spawn_file_actions_adddup2(&actions, errors[1], STDERR_FILENO) == 0 else {
@@ -163,8 +175,8 @@ enum GitHubCLIProcess {
         guard posix_spawnattr_setflags(&attributes, Int16(POSIX_SPAWN_SETPGROUP | POSIX_SPAWN_CLOEXEC_DEFAULT)) == 0,
               posix_spawnattr_setpgroup(&attributes, 0) == 0 else { throw ProviderFailure.network }
         let args = ([binary.path] + arguments).map { strdup($0) } + [nil]
-        let env = environment(home: FileManager.default.homeDirectoryForCurrentUser.path,
-                              inherited: ProcessInfo.processInfo.environment)
+        let env = (environment ?? Self.environment(home: FileManager.default.homeDirectoryForCurrentUser.path,
+                                                   inherited: ProcessInfo.processInfo.environment))
             .map { strdup("\($0.key)=\($0.value)") } + [nil]
         defer { args.forEach { free($0) }; env.forEach { free($0) } }
         var pid: pid_t = 0

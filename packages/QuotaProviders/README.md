@@ -34,7 +34,7 @@ sends no cookies, and caps response size:
 | DeepSeek | API key or platform token | official balance API / platform wallet summary |
 | OpenCode Go | API key, cookie for Zen balance | `zen/go/v1/usage`; billing server balance |
 | Claude | This Mac's Claude Code login (Keychain `Claude Code-credentials`, re-read every fetch), or a pasted OAuth token | `api/oauth/usage` 5-hour / weekly / Opus / Sonnet windows, `api/oauth/profile` identity; no refresh |
-| Antigravity | OAuth JSON (accessToken + projectId) | cloud-code `fetchAvailableModels` + `retrieveUserQuota`; no refresh, expired tokens require re-import |
+| Antigravity | This Mac's agy sign-in (re-read every fetch; agy owns renewal), or imported OAuth JSON (accessToken + projectId) | local `agy -p /usage` plus a Google account check that is not stored; imported files use cloud-code `fetchAvailableModels` + `retrieveUserQuota` and are not refreshed |
 | WorkBuddy | This Mac's WorkBuddy desktop login (`CodeBuddyExtension/Data/Public/auth/workbuddy-desktop.info`, re-read every fetch), or a pasted access token | `billing/meter/get-user-resource` per-package credit cycles; no refresh |
 
 Reader-level semantics: synthetic placeholders and unlimited seats never
