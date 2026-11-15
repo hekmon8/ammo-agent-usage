@@ -14,11 +14,18 @@ case "$platform" in
     ;;
   macos)
     swift test --disable-sandbox
-    xcodebuild -project Ammo.xcodeproj -scheme AmmoDesktop -configuration Debug \
+    # Empty team and dropped entitlements let a certificate-less machine build;
+    # Xcode then ad-hoc signs so the artifact stays launchable on Apple
+    # Silicon, where a fully unsigned binary is killed by the kernel.
+    # iCloud sync degrades gracefully in the CI artifact and is restored by
+    # any signed local build.
+    xcodebuild -project Ammo.xcodeproj -scheme AmmoDesktop -configuration Release \
       -destination 'platform=macOS' -derivedDataPath .build/native-mac \
-      CODE_SIGNING_ALLOWED=NO build
-    ditto -c -k --keepParent .build/native-mac/Build/Products/Debug/Ammo.app \
-      .build/ci/Ammo-macOS-unsigned.zip
+      DEVELOPMENT_TEAM= CODE_SIGN_ENTITLEMENTS= build
+    codesign --verify --strict .build/native-mac/Build/Products/Release/Ammo.app
+    ditto -c -k --keepParent .build/native-mac/Build/Products/Release/Ammo.app \
+      .build/ci/Ammo-macOS.zip
+    shasum -a 256 .build/ci/Ammo-macOS.zip > .build/ci/Ammo-macOS.zip.sha256
     ;;
   *) echo 'Choose ios or macos.' >&2; exit 2 ;;
 esac

@@ -75,11 +75,13 @@ jobs:
           persist-credentials: false
       - run: bash scripts/ci/setup-apple.sh
       - run: bash scripts/ci/apple-build.sh macos
-      - name: Upload unsigned native macOS app
+      - name: Upload ad-hoc signed macOS app
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: Ammo-macOS-unsigned
-          path: .build/ci/Ammo-macOS-unsigned.zip
+          name: Ammo-macOS
+          path: |
+            .build/ci/Ammo-macOS.zip
+            .build/ci/Ammo-macOS.zip.sha256
           include-hidden-files: true
           if-no-files-found: error
           retention-days: 7
