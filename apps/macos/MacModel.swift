@@ -251,6 +251,9 @@ final class MacModel: ObservableObject {
     @Published private(set) var mcpEnabled = UserDefaults.standard.bool(forKey: "quota.mcp.consent")
     @Published private(set) var mcpPending = UserDefaults.standard.bool(forKey: "quota.mcp.pending")
     @Published private(set) var mcpBusy = false
+    @Published private(set) var mcpNeverExpires = UserDefaults.standard.bool(forKey: "quota.mcp.neverExpires")
+    @Published private(set) var mcpIncludesReceivedShares = UserDefaults.standard.bool(forKey: "quota.mcp.includeReceived")
+    @Published private(set) var mcpSettingsMessage = LocalizedStatus.empty
     @Published private(set) var mcpMessage = LocalizedStatus("mac.mcp.disabled")
     @Published private(set) var mcpEndpoint = ""
     private var mcpClient: RemoteMCPClient?
@@ -347,6 +350,7 @@ final class MacModel: ObservableObject {
                 mcpPending = true
                 UserDefaults.standard.set(true, forKey: "quota.mcp.pending")
                 try await mcpClient.enable(token: token)
+                resetMCPOptions()
                 try vault.save(Data(token.utf8), account: "mcp-read-token")
                 try? vault.remove("mcp-token-draft")
                 mcpPending = false
@@ -357,6 +361,7 @@ final class MacModel: ObservableObject {
                 if let snapshot { try await mcpClient.upload(snapshot) }
             } else {
                 try await mcpClient.disable()
+                resetMCPOptions()
                 mcpEnabled = false
                 UserDefaults.standard.set(false, forKey: "quota.mcp.consent")
                 mcpPending = false
@@ -369,6 +374,49 @@ final class MacModel: ObservableObject {
             mcpMessage = LocalizedStatus(enabled ? "mac.mcp.enable.incomplete" : "mac.mcp.revoke.unconfirmed")
         }
     }
+    var canChangeMCPOptions: Bool {
+        cfSyncEnabled && mcpEnabled && !mcpPending && !mcpBusy && !cfSwitchBusy && !cloudConnecting &&
+            !workerSwitchPending && !rotationPending && !rotationBusy && !receivingBusy
+    }
+
+    func keepMCPKeyUntilRevoked() async {
+        guard canChangeMCPOptions, !mcpNeverExpires, let mcpClient, let token = mcpReadToken else { return }
+        mcpBusy = true
+        defer { mcpBusy = false }
+        do {
+            try await mcpClient.keepKeyUntilRevoked(token: token)
+            mcpNeverExpires = true
+            UserDefaults.standard.set(true, forKey: "quota.mcp.neverExpires")
+            mcpSettingsMessage = .empty
+        } catch { mcpSettingsMessage = LocalizedStatus("mac.mcp.settingsFailed") }
+    }
+
+    func setMCPIncludesReceivedShares(_ enabled: Bool) async {
+        guard canChangeMCPOptions, let mcpClient, let token = mcpReadToken else { return }
+        mcpBusy = true
+        defer { mcpBusy = false }
+        // Keep opt-in intent on disk before an ambiguous network outcome. Only
+        // mark an opt-out complete after the Worker confirms it cleared the links.
+        if enabled {
+            mcpIncludesReceivedShares = true
+            UserDefaults.standard.set(true, forKey: "quota.mcp.includeReceived")
+        }
+        do {
+            try await mcpClient.setReceivedShares(enabled ? receivedGrants : [], token: token)
+            mcpIncludesReceivedShares = enabled
+            UserDefaults.standard.set(enabled, forKey: "quota.mcp.includeReceived")
+            mcpSettingsMessage = .empty
+        } catch { mcpSettingsMessage = LocalizedStatus("mac.mcp.settingsFailed") }
+    }
+
+    private func resetMCPOptions() {
+        mcpNeverExpires = false
+        mcpIncludesReceivedShares = false
+        mcpSettingsMessage = .empty
+        UserDefaults.standard.removeObject(forKey: "quota.mcp.neverExpires")
+        UserDefaults.standard.removeObject(forKey: "quota.mcp.includeReceived")
+    }
+
     @discardableResult func copyMCPEndpoint() -> Bool {
         guard mcpEnabled, !mcpPending, !mcpEndpoint.isEmpty else { return false }
         copyToPasteboard(mcpEndpoint)
@@ -517,7 +565,7 @@ final class MacModel: ObservableObject {
             ?? StoredReceivedShares(claims: [], grants: [])
         receivedClaims = received.claims
         receivedGrants = received.grants
-        Task { await refreshReceivedShares() }
+        Task { await refreshReceivedShares(reconcileMCP: true) }
         snapshot = try? AtomicSnapshotReader(directory: directory).latest(); onChange?()
         if iCloudEnabled, let snapshot { uploadICloud(snapshot) }
         do {
@@ -1669,6 +1717,7 @@ final class MacModel: ObservableObject {
         // old in-memory uploader while its grant still exists remotely.
         try await RemoteMCPClient(credentials: current).disable()
         await mcpClient?.pause()
+        resetMCPOptions()
         mcpEnabled = false
         mcpPending = false
         UserDefaults.standard.set(false, forKey: "quota.mcp.consent")
@@ -1693,6 +1742,7 @@ final class MacModel: ObservableObject {
     }
     private func stopPreviousMCPForSwitch() async {
         await mcpClient?.pause()
+        resetMCPOptions()
         mcpEnabled = false
         mcpPending = false
         UserDefaults.standard.set(false, forKey: "quota.mcp.consent")
@@ -1847,6 +1897,7 @@ final class MacModel: ObservableObject {
             await refreshShares()
             await configureProjection(draft.next)
             await mcpClient?.pause()
+            resetMCPOptions()
             mcpEnabled = false
             mcpPending = false
             UserDefaults.standard.set(false, forKey: "quota.mcp.pending")
@@ -2015,11 +2066,12 @@ final class MacModel: ObservableObject {
         } catch { receivingMessage = LocalizedStatus("mac.share.claimFailed") }
     }
 
-    func refreshReceivedShares() async {
+    func refreshReceivedShares(reconcileMCP: Bool = false) async {
         guard !receivingBusy else { return }
         receivingBusy = true
         defer { receivingBusy = false }
         var failures = false
+        let previousGrantCount = receivedGrants.count
         for claim in receivedClaims {
             do {
                 guard let grant = try await ShareRecipient.result(claim: claim) else { continue }
@@ -2047,17 +2099,37 @@ final class MacModel: ObservableObject {
             }
         }
         if failures { receivingMessage = LocalizedStatus("mac.share.receiveFailed") }
+        if (reconcileMCP || previousGrantCount != receivedGrants.count),
+           cfSyncEnabled, mcpIncludesReceivedShares, mcpEnabled, !mcpPending, !mcpBusy, !workerSwitchPending,
+           !rotationPending, !rotationBusy, let mcpClient, let token = mcpReadToken {
+            mcpBusy = true
+            defer { mcpBusy = false }
+            do {
+                try await mcpClient.setReceivedShares(receivedGrants, token: token)
+                mcpSettingsMessage = .empty
+            } catch { mcpSettingsMessage = LocalizedStatus("mac.mcp.settingsFailed") }
+        }
     }
 
     func receivedProjection(for grant: ShareGrant) -> ShareProjection? {
         receivedProjections[receivedKey(endpoint: grant.endpoint, shareID: grant.shareId)]
     }
 
-    func removeReceivedShare(endpoint: URL, shareID: String) {
+    func removeReceivedShare(endpoint: URL, shareID: String) async {
+        guard !receivingBusy else { return }
+        receivingBusy = true
+        defer { receivingBusy = false }
         let key = receivedKey(endpoint: endpoint, shareID: shareID)
         do {
             let claims = receivedClaims.filter { receivedKey(endpoint: $0.endpoint, shareID: $0.shareId) != key }
             let grants = receivedGrants.filter { receivedKey(endpoint: $0.endpoint, shareID: $0.shareId) != key }
+            if mcpIncludesReceivedShares, grants.count != receivedGrants.count {
+                guard !mcpBusy, !mcpPending, !cloudConnecting, !workerSwitchPending, !rotationPending,
+                      !rotationBusy, let mcpClient, let token = mcpReadToken else { throw SyncError.configuration }
+                mcpBusy = true
+                defer { mcpBusy = false }
+                try await mcpClient.setReceivedShares(grants, token: token)
+            }
             try vault.save(JSONEncoder().encode(StoredReceivedShares(claims: claims, grants: grants)),
                            account: "received-shares")
             receivedClaims = claims

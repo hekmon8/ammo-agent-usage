@@ -52,11 +52,30 @@ public actor RemoteMCPClient {
         guard token.count >= 32 else { throw SyncError.configuration }
         enabled = false
         let attempt = UUID(); generation = attempt
-        let hash = SHA256.hash(data: Data(token.utf8)).map { String(format: "%02x", $0) }.joined()
         try await enqueue(path: "/v1/mcp-access", method: "PUT",
-            body: JSONSerialization.data(withJSONObject: ["tokenHash": hash, "consent": "share_redacted_quotas", "sourceEpoch": credentials.epoch]))
+            body: JSONSerialization.data(withJSONObject: ["tokenHash": tokenHash(token), "consent": "share_redacted_quotas", "sourceEpoch": credentials.epoch]))
         guard generation == attempt else { throw CancellationError() }
         enabled = true
+    }
+    private func tokenHash(_ token: String) -> String {
+        SHA256.hash(data: Data(token.utf8)).map { String(format: "%02x", $0) }.joined()
+    }
+    public func keepKeyUntilRevoked(token: String) async throws {
+        try await enqueue(path: "/v1/mcp-access", method: "PATCH",
+                          body: JSONEncoder().encode(["lifetime": "until_revoked", "tokenHash": tokenHash(token)]))
+    }
+    public func setReceivedShares(_ grants: [ShareGrant], token: String) async throws {
+        struct Reference: Encodable { let shareId, viewerTokenHash: String }
+        struct Update: Encodable { let tokenHash: String; let shares: [Reference] }
+        let shares = grants.compactMap { grant -> Reference? in
+            let endpoint = credentials.endpoint
+            guard grant.endpoint.scheme == endpoint.scheme,
+                  grant.endpoint.host?.lowercased() == endpoint.host?.lowercased(),
+                  (grant.endpoint.port ?? 443) == (endpoint.port ?? 443) else { return nil }
+            return Reference(shareId: grant.shareId, viewerTokenHash: tokenHash(grant.token))
+        }
+        try await enqueue(path: "/v1/mcp-shares", method: "PUT",
+                          body: JSONEncoder().encode(Update(tokenHash: tokenHash(token), shares: shares)))
     }
     public func disable() async throws {
         enabled = false; generation = UUID()

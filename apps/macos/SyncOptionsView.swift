@@ -124,6 +124,22 @@ struct MacExternalToolsOptions: View {
                     }
                     Text(L("settings.mcp.clientConfigHelp"))
                         .studioType(.caption).foregroundStyle(.secondary)
+                    if model.mcpNeverExpires {
+                        Text(L("settings.mcp.keyUntilRevoked"))
+                    } else {
+                        Button(L("settings.mcp.keepKey")) {
+                            Task { await model.keepMCPKeyUntilRevoked() }
+                        }.disabled(!model.canChangeMCPOptions)
+                    }
+                    Toggle(L("settings.mcp.includeReceived"), isOn: Binding(
+                        get: { model.mcpIncludesReceivedShares },
+                        set: { enabled in Task { await model.setMCPIncludesReceivedShares(enabled) } }
+                    )).disabled(!model.canChangeMCPOptions)
+                    Text(L("settings.mcp.includeReceivedHelp"))
+                        .studioType(.caption).foregroundStyle(.secondary)
+                    if !model.mcpSettingsMessage.isEmpty {
+                        Text(model.mcpSettingsMessage.text).studioType(.caption)
+                    }
                 }
                 DisclosureGroup(L("settings.mcp.setupGuide")) {
                     Text(L("settings.mcp.guideSteps"))

@@ -2141,6 +2141,50 @@
         }
       }
     },
+    "/v1/mcp-access": {
+      "put": {
+        "operationId": "setMCPAccess", "summary": "Create or replace a 90-day quota MCP grant, clearing its projection and share references",
+        "security": [{"deviceBearer": []}], "x-required-role": "writer",
+        "requestBody": {"required": true, "content": {"application/json": {"schema": {
+          "type": "object", "additionalProperties": false, "required": ["tokenHash", "consent", "sourceEpoch"],
+          "properties": {"tokenHash": {"type": "string", "pattern": "^[a-f0-9]{64}$"}, "consent": {"const": "share_redacted_quotas"}, "sourceEpoch": {"type": "string"}}
+        }}}},
+        "responses": {"200": {"description": "Accepted with a date-time expiresAt"}, "400": {"description": "Invalid request"}, "409": {"description": "Grant not admitted"}}
+      },
+      "patch": {
+        "operationId": "makeMCPAccessPersistent", "summary": "Convert the current active MCP grant without replacing its key or data",
+        "security": [{"deviceBearer": []}], "x-required-role": "writer",
+        "requestBody": {"required": true, "content": {"application/json": {"schema": {
+          "type": "object", "additionalProperties": false, "required": ["lifetime", "tokenHash"],
+          "properties": {"lifetime": {"const": "until_revoked"}, "tokenHash": {"type": "string", "pattern": "^[a-f0-9]{64}$"}}
+        }}}},
+        "responses": {
+          "200": {"description": "Accepted; the grant now has no time-based expiry", "content": {"application/json": {"schema": {
+            "type": "object", "required": ["accepted", "expiresAt"], "properties": {"accepted": {"const": true}, "expiresAt": {"type": "null"}}
+          }}}},
+          "400": {"description": "Invalid request"}, "409": {"description": "No active current grant"}
+        }
+      },
+      "delete": {
+        "operationId": "disableMCPAccess", "summary": "Delete the quota MCP grant and its data",
+        "security": [{"deviceBearer": []}], "x-required-role": "writer", "responses": {"200": {"description": "Accepted"}}
+      }
+    },
+    "/v1/mcp-shares": {
+      "put": {
+        "operationId": "replaceMCPShareReferences", "summary": "Replace references on the current active quota MCP grant; send an empty array to clear",
+        "description": "Share IDs must be unique. Send only the SHA-256 hex digest of the viewer token, never the token itself. Reads include only matching approved shares with a published projection; unmatched references are ignored.",
+        "security": [{"deviceBearer": []}], "x-required-role": "writer",
+        "requestBody": {"required": true, "content": {"application/json": {"schema": {
+          "type": "object", "additionalProperties": false, "required": ["shares", "tokenHash"],
+          "properties": {"tokenHash": {"type": "string", "pattern": "^[a-f0-9]{64}$"}, "shares": {"type": "array", "maxItems": 32, "items": {
+            "type": "object", "additionalProperties": false, "required": ["shareId", "viewerTokenHash"],
+            "properties": {"shareId": {"type": "string", "pattern": "^[A-Za-z0-9_-]{1,80}$"}, "viewerTokenHash": {"type": "string", "pattern": "^[a-f0-9]{64}$"}}
+          }}}
+        }}}},
+        "responses": {"200": {"description": "Accepted"}, "400": {"description": "Invalid request"}, "409": {"description": "No active current grant"}}
+      }
+    },
     "/v1/shares/{shareId}/projection": {
       "parameters": [{"name": "shareId", "in": "path", "required": true, "schema": {"type": "string"}}],
       "put": {"operationId": "publishQuotaShareProjection", "summary": "Writer publishes minimal plaintext windows for the selected instance", "security": [{"deviceBearer": []}], "x-required-role": "writer", "requestBody": {"required": true, "content": {"application/json": {"schema": {"type": "object", "required": ["capturedAt", "windows"], "properties": {"capturedAt": {"type": "string", "format": "date-time"}, "windows": {"type": "array", "maxItems": 80, "items": {"$ref": "#/components/schemas/ShareWindow"}}}}}}}, "responses": {"200": {"description": "Accepted"}}},
