@@ -257,6 +257,7 @@ final class MacModel: ObservableObject {
     @Published private(set) var mcpMessage = LocalizedStatus("mac.mcp.disabled")
     @Published private(set) var mcpEndpoint = ""
     private var mcpClient: RemoteMCPClient?
+    private var mcpReceivedSharesNeedSync = false
     private var iCloudSync: ICloudSnapshotSync?
     private var iCloudUpload: Task<Void, Never>?
     private var pendingICloudSnapshot: Snapshot?
@@ -398,11 +399,13 @@ final class MacModel: ObservableObject {
         // Keep opt-in intent on disk before an ambiguous network outcome. Only
         // mark an opt-out complete after the Worker confirms it cleared the links.
         if enabled {
+            mcpReceivedSharesNeedSync = true
             mcpIncludesReceivedShares = true
             UserDefaults.standard.set(true, forKey: "quota.mcp.includeReceived")
         }
         do {
             try await mcpClient.setReceivedShares(enabled ? receivedGrants : [], token: token)
+            mcpReceivedSharesNeedSync = false
             mcpIncludesReceivedShares = enabled
             UserDefaults.standard.set(enabled, forKey: "quota.mcp.includeReceived")
             mcpSettingsMessage = .empty
@@ -412,6 +415,7 @@ final class MacModel: ObservableObject {
     private func resetMCPOptions() {
         mcpNeverExpires = false
         mcpIncludesReceivedShares = false
+        mcpReceivedSharesNeedSync = false
         mcpSettingsMessage = .empty
         UserDefaults.standard.removeObject(forKey: "quota.mcp.neverExpires")
         UserDefaults.standard.removeObject(forKey: "quota.mcp.includeReceived")
@@ -2099,13 +2103,17 @@ final class MacModel: ObservableObject {
             }
         }
         if failures { receivingMessage = LocalizedStatus("mac.share.receiveFailed") }
-        if (reconcileMCP || previousGrantCount != receivedGrants.count),
-           cfSyncEnabled, mcpIncludesReceivedShares, mcpEnabled, !mcpPending, !mcpBusy, !workerSwitchPending,
+        if mcpIncludesReceivedShares, reconcileMCP || previousGrantCount != receivedGrants.count {
+            mcpReceivedSharesNeedSync = true
+        }
+        if mcpReceivedSharesNeedSync, cfSyncEnabled, mcpIncludesReceivedShares, mcpEnabled,
+           !mcpPending, !mcpBusy, !workerSwitchPending,
            !rotationPending, !rotationBusy, let mcpClient, let token = mcpReadToken {
             mcpBusy = true
             defer { mcpBusy = false }
             do {
                 try await mcpClient.setReceivedShares(receivedGrants, token: token)
+                mcpReceivedSharesNeedSync = false
                 mcpSettingsMessage = .empty
             } catch { mcpSettingsMessage = LocalizedStatus("mac.mcp.settingsFailed") }
         }
