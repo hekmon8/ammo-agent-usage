@@ -288,7 +288,8 @@ function routePath(pathname: string): { pairingId?: string; deviceId?: string; a
 function rateScope(method: string, pathname: string, route: ReturnType<typeof routePath>): string | null {
   const fixed: Record<string, readonly string[]> = {
     "/mcp": ["POST"],
-    "/v1/mcp-access": ["PUT", "DELETE"],
+    "/v1/mcp-access": ["PUT", "PATCH", "DELETE"],
+    "/v1/mcp-shares": ["PUT"],
     "/v1/mcp-snapshot": ["PUT"],
     "/v1/bootstrap": ["POST"],
     "/v1/pairings": ["POST"],
@@ -839,7 +840,7 @@ export default {
     if (!(await allowed(request, env, scope))) return problem(429, "rate_limited");
     if (isV2Route(url.pathname)) { const device = await authenticateDevice(request, env); return device ? handleV2(request, env, device, { json, problem, readJson, encryptStored }) : problem(401, "invalid_credential"); }
     if (url.pathname === "/mcp") return handleMCP(request, env);
-    if (url.pathname === "/v1/mcp-access" || url.pathname === "/v1/mcp-snapshot") {
+    if (url.pathname === "/v1/mcp-access" || url.pathname === "/v1/mcp-snapshot" || url.pathname === "/v1/mcp-shares") {
       const device = await authenticateDevice(request, env);
       return device ? manageMCP(request, env, device) : problem(401, "invalid_credential");
     }

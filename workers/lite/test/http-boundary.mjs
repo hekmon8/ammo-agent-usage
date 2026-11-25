@@ -106,6 +106,9 @@ test("P2-01 worker enforces pairing, acknowledgement, and immediate revocation a
   const secondMCPHash = Buffer.from(await crypto.subtle.digest("SHA-256", new TextEncoder().encode("synthetic-other-mcp-token-000000000000"))).toString("hex");
   const expiredMCPHash = Buffer.from(await crypto.subtle.digest("SHA-256", new TextEncoder().encode("synthetic-expired-mcp-token-0000000000"))).toString("hex");
   await run(["d1", "execute", "DB", "--local", "--persist-to", state, "--config", "workers/lite/wrangler.jsonc", "--command", `INSERT INTO mcp_access (workspace_id,token_hash,source_epoch,expires_at) VALUES ('other-ws','${secondMCPHash}','other-epoch','2099-01-01T00:00:00.000Z'); INSERT INTO workspaces VALUES ('expired-ws','expired-writer','expired-epoch','synthetic-key','2026-01-01T00:00:00.000Z'); INSERT INTO devices (device_id,workspace_id,role,name,token_hash,created_at) VALUES ('expired-writer','expired-ws','writer','Expired','unused-synthetic-writer-hash','2026-01-01T00:00:00.000Z'); INSERT INTO mcp_access (workspace_id,token_hash,source_epoch,expires_at) VALUES ('expired-ws','${expiredMCPHash}','expired-epoch','2000-01-01T00:00:00.000Z');`]);
+  const mcpDb = (sql) => run(["d1", "execute", "DB", "--local", "--persist-to", state, "--config", "workers/lite/wrangler.jsonc", "--command", sql]);
+  const viewerHash = Buffer.from(await crypto.subtle.digest("SHA-256", new TextEncoder().encode("synthetic-mcp-share-viewer-000000001"))).toString("hex");
+  await mcpDb(`INSERT INTO quota_shares (share_id,workspace_id,writer_device_id,connection_id,provider_id,account_id,label,invite_secret_hash,state,viewer_token_hash,expires_at,created_at) VALUES ('test-received-share','other-ws','other-writer','private-connection','antigravity','private-account','Private Share Label','synthetic-invite-hash','approved','${viewerHash}','2000-01-01T00:00:00.000Z','2000-01-01T00:00:00.000Z');`);
   worker = command(["dev", "--local", "--persist-to", state, "--port", String(port), "--var", "BOOTSTRAP_ENABLED:true", "--var", `BOOTSTRAP_SECRET:${secret}`, "--var", `DELIVERY_ENCRYPTION_KEY:${encryptionKey}`, "--config", "workers/lite/wrangler.jsonc"]);
   let ready = false;
   for (let attempt = 0; attempt < 300; attempt++) {
@@ -122,7 +125,7 @@ test("P2-01 worker enforces pairing, acknowledgement, and immediate revocation a
   const bootstrapPayload = { deviceName: "Test Mac", sourcePublicKey: sourceKey, requestId: "synthetic_bootstrap_1" };
   const boot = await request("/v1/bootstrap", { method: "POST", headers: { "x-bootstrap-token": secret, "content-type": "application/json" }, body: JSON.stringify(bootstrapPayload) });
   assert.equal(boot.response.status, 200); const writer = boot.body;
-  await verifyExternalMCP(`http://127.0.0.1:${port}`, writer, { deviceToken: "synthetic-other-writer-token-0000000000" });
+  await verifyExternalMCP(`http://127.0.0.1:${port}`, writer, { deviceToken: "synthetic-other-writer-token-0000000000" }, viewerHash, (tokenHash) => mcpDb(`UPDATE mcp_access SET expires_at = '2000-01-01T00:00:00.000Z' WHERE token_hash = '${tokenHash}'`));
   const bootstrapRetries = await Promise.all([request("/v1/bootstrap", { method: "POST", headers: { "x-bootstrap-token": secret, "content-type": "application/json" }, body: JSON.stringify(bootstrapPayload) }), request("/v1/bootstrap", { method: "POST", headers: { "x-bootstrap-token": secret, "content-type": "application/json" }, body: JSON.stringify(bootstrapPayload) })]);
   for (const retry of bootstrapRetries) { assert.equal(retry.response.status, 200); assert.deepEqual(retry.body, writer); }
   const bootstrapMismatch = await request("/v1/bootstrap", { method: "POST", headers: { "x-bootstrap-token": secret, "content-type": "application/json" }, body: JSON.stringify({ ...bootstrapPayload, sourcePublicKey: Buffer.alloc(32, 9).toString("base64url") }) });
@@ -213,8 +216,21 @@ test("P2-01 worker enforces pairing, acknowledgement, and immediate revocation a
   assert.equal(incompleteRotation.response.status, 409);
   const invalidTrust = await request("/v1/source-key-rotations", { method: "POST", headers: { authorization: `Bearer ${writer.deviceToken}`, "content-type": "application/json" }, body: JSON.stringify({ ...rotation.request, trustSignature: `${rotation.request.trustSignature[0] === "A" ? "B" : "A"}${rotation.request.trustSignature.slice(1)}` }) });
   assert.equal(invalidTrust.response.status, 403);
+  const pinnedToken = "synthetic-mcp-source-pinned-00000000";
+  const pinnedHash = Buffer.from(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(pinnedToken))).toString("hex");
+  const mcpRequest = (path, method, token, body) => request(path, { method, headers: { authorization: `Bearer ${token}`, "content-type": "application/json", accept: "application/json, text/event-stream", "cf-connecting-ip": "192.0.2.3" }, body: JSON.stringify(body) });
+  const permanent = { lifetime: "until_revoked", tokenHash: pinnedHash };
+  assert.equal((await mcpRequest("/v1/mcp-access", "PUT", writer.deviceToken, { tokenHash: pinnedHash, consent: "share_redacted_quotas", sourceEpoch: writer.sourceEpoch })).response.status, 200);
+  assert.equal((await mcpRequest("/v1/mcp-access", "PATCH", result.body.deviceToken, permanent)).response.status, 403);
+  assert.equal((await mcpRequest("/v1/mcp-shares", "PUT", result.body.deviceToken, { shares: [], tokenHash: pinnedHash })).response.status, 403);
+  assert.equal((await mcpRequest("/v1/mcp-access", "PATCH", writer.deviceToken, permanent)).response.status, 200);
+  const pingMCP = () => mcpRequest("/mcp", "POST", pinnedToken, { jsonrpc: "2.0", id: 1, method: "ping" });
+  assert.equal((await pingMCP()).response.status, 200);
   const rotated = await request("/v1/source-key-rotations", { method: "POST", headers: { authorization: `Bearer ${writer.deviceToken}`, "content-type": "application/json" }, body: JSON.stringify(rotation.request) });
   assert.equal(rotated.response.status, 200); assert.equal(rotated.body.sourceEpoch, rotation.request.newSourceEpoch);
+  assert.equal((await pingMCP()).response.status, 401);
+  assert.equal((await mcpRequest("/v1/mcp-access", "PATCH", writer.deviceToken, permanent)).response.status, 409);
+  assert.equal((await mcpRequest("/v1/mcp-shares", "PUT", writer.deviceToken, { shares: [], tokenHash: pinnedHash })).response.status, 409);
   const rotationRetry = await request("/v1/source-key-rotations", { method: "POST", headers: { authorization: `Bearer ${writer.deviceToken}`, "content-type": "application/json" }, body: JSON.stringify(rotation.request) });
   assert.equal(rotationRetry.response.status, 200); assert.deepEqual(rotationRetry.body, rotated.body);
   const changedRotation = { ...rotation.request, wraps: [{ ...rotation.request.wraps[0], wrappedSnapshotKey: `${rotation.request.wraps[0].wrappedSnapshotKey[0] === "A" ? "B" : "A"}${rotation.request.wraps[0].wrappedSnapshotKey.slice(1)}` }] };

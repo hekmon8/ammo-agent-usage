@@ -572,8 +572,13 @@
 "settings.mcp.copyEndpoint" = "Copy Service Address";
 "settings.mcp.copyToken" = "Copy Read-Only Token";
 "settings.mcp.disclosure" = "External AI Tool Integration";
-"settings.mcp.guideSteps" = "1. Upgrade the self-hosted Worker and apply the database migration.\n2. Turn on sharing and use the buttons above to copy the service address and read-only token.\n3. Add a remote MCP in a client that supports Streamable HTTP: you can paste the copied client config directly; for manual setup, enter the /mcp address and set the Authorization header to Bearer <read-only token>.\n4. After connecting you should see quota_list, quota_get, and quota_health; run quota_health to check observability first, then query quotas.\n5. Tokens expire after 90 days; turning off sharing or rotating the token revokes access. MCP cannot trigger collection — the Mac needs to keep updating.";
+"settings.mcp.guideSteps" = "1. Upgrade the self-hosted Worker and apply the database migration.\n2. Turn on sharing and use the buttons above to copy the service address and read-only token.\n3. Add a remote MCP in a client that supports Streamable HTTP: you can paste the copied client config directly; for manual setup, enter the /mcp address and set the Authorization header to Bearer <read-only token>.\n4. After connecting you should see quota_list, quota_get, and quota_health; run quota_health to check observability first, then query quotas.\n5. New tokens expire after 90 days unless you keep them until revoked. Turning off sharing or rotating the token revokes access. MCP cannot trigger collection; the source Mac needs to keep updating.";
 "settings.mcp.headerRequirement" = "The client must support custom Authorization headers; clients that only support OAuth or local stdio cannot use this entry point directly.";
+"settings.mcp.includeReceived" = "Include Received Quotas";
+"settings.mcp.includeReceivedHelp" = "Includes quotas shared with this Mac through the same sync service. If the sender revokes sharing, those quotas disappear from the API.";
+"settings.mcp.keepKey" = "Keep This Key Until Revoked";
+"settings.mcp.keyUntilRevoked" = "This key does not expire.";
+"mac.mcp.settingsFailed" = "The change could not be confirmed. Check the connection and retry.";
 "settings.mcp.retryRevoke" = "Retry Revoking External Access";
 "settings.mcp.rotateToken" = "Rotate Token & Revoke Old One";
 "settings.mcp.sectionTitle" = "External AI Tool Integration (HTTP MCP)";

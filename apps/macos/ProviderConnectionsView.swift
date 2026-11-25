@@ -864,8 +864,8 @@ private struct MacReceivedSharesView: View {
                                 Task { await model.refreshReceivedShares() }
                             }.disabled(model.receivingBusy)
                             Button(L("mac.share.removeLocal"), role: .destructive) {
-                                model.removeReceivedShare(endpoint: claim.endpoint, shareID: claim.shareId)
-                            }
+                                Task { await model.removeReceivedShare(endpoint: claim.endpoint, shareID: claim.shareId) }
+                            }.disabled(model.receivingBusy)
                         }.frame(maxWidth: .infinity, alignment: .leading)
                     }
                     ForEach(model.receivedGrants, id: \.shareId) { grant in
@@ -886,8 +886,8 @@ private struct MacReceivedSharesView: View {
                                 Text(L("mac.share.waitingValues")).foregroundStyle(.secondary)
                             }
                             Button(L("mac.share.removeLocal"), role: .destructive) {
-                                model.removeReceivedShare(endpoint: grant.endpoint, shareID: grant.shareId)
-                            }
+                                Task { await model.removeReceivedShare(endpoint: grant.endpoint, shareID: grant.shareId) }
+                            }.disabled(model.receivingBusy)
                         }.padding(14)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 12))

@@ -99,3 +99,22 @@ sharing, external MCP projections, APNs, or CloudKit in this MVP.
 Run `npm run test:http` for synthetic localhost usage/auth/replay/size coverage.
 `npm run test:usage` runs the same assertions against the actual Worker handler
 and real in-memory SQLite for restricted containers without interface enumeration.
+
+### Quota MCP access
+
+A writer's `PUT /v1/mcp-access` creates a 90-day grant and resets the local
+projection and received references. `PATCH /v1/mcp-access` with
+`{"lifetime":"until_revoked","tokenHash":"…"}` keeps the current active key and returns
+`{"accepted":true,"expiresAt":null}`. It does not revive expired grants.
+`DELETE /v1/mcp-access` disables the key regardless of lifetime.
+
+`PUT /v1/mcp-shares` takes `{tokenHash, shares}` and replaces the current grant's
+received references with up to 32 distinct `{shareId, viewerTokenHash}` records.
+Send an empty `shares` array to clear. Both mutations require the lowercase
+SHA-256 hex digest of the current MCP key, so a delayed request cannot change a
+replacement key. Keep the viewer token and its delegation hash out of logs. A quota call reads
+matching approved projections directly from D1, so publishing and revoking a
+share take effect without uploading a new MCP snapshot. The MCP tools return
+only redacted windows, marked `local` or `received`. Received window IDs are
+opaque and can be passed to `quota_get`; labels and account metadata are not
+included.

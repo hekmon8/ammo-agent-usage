@@ -572,8 +572,13 @@
 "settings.mcp.copyEndpoint" = "复制服务地址";
 "settings.mcp.copyToken" = "复制只读令牌";
 "settings.mcp.disclosure" = "外部 AI 工具接入";
-"settings.mcp.guideSteps" = "1. 升级自托管 Worker 并应用数据库迁移。\n2. 开启共享，用上方按钮复制服务地址与只读令牌。\n3. 在支持 Streamable HTTP 的客户端新增远程 MCP：可直接粘贴一键复制的客户端配置；手动配置时填写 /mcp 地址，并在请求头设置 Authorization: Bearer <只读令牌>。\n4. 连接后应能看到 quota_list、quota_get 和 quota_health；先用 quota_health 检查观测，再查询额度。\n5. 令牌 90 天到期；关闭共享或更新令牌可撤销访问。MCP 不能触发采集，Mac 需要持续更新。";
+"settings.mcp.guideSteps" = "1. 升级自托管 Worker 并应用数据库迁移。\n2. 开启共享，用上方按钮复制服务地址与只读令牌。\n3. 在支持 Streamable HTTP 的客户端新增远程 MCP：可直接粘贴一键复制的客户端配置；手动配置时填写 /mcp 地址，并在请求头设置 Authorization: Bearer <只读令牌>。\n4. 连接后应能看到 quota_list、quota_get 和 quota_health；先用 quota_health 检查观测，再查询额度。\n5. 新令牌默认 90 天到期，也可设为不过期。关闭共享或更新令牌可撤销访问。MCP 不能触发采集，来源 Mac 需要持续更新。";
 "settings.mcp.headerRequirement" = "客户端需支持自定义 Authorization 请求头；仅支持 OAuth 或本地 stdio 的客户端不能直接使用此入口。";
+"settings.mcp.includeReceived" = "包含收到的额度分享";
+"settings.mcp.includeReceivedHelp" = "只包含通过同一同步服务收到的分享。对方撤销后，接口不再返回对应额度。";
+"settings.mcp.keepKey" = "设置此令牌不过期";
+"settings.mcp.keyUntilRevoked" = "当前令牌不会到期。";
+"mac.mcp.settingsFailed" = "未能确认设置生效，请检查连接后重试。";
 "settings.mcp.retryRevoke" = "重试撤销外部访问";
 "settings.mcp.rotateToken" = "更新令牌并撤销旧令牌";
 "settings.mcp.sectionTitle" = "外部 AI 工具接入（HTTP MCP）";
