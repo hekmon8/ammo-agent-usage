@@ -36,7 +36,7 @@ let package = Package(
         .target(name: "QuotaSync", dependencies: ["QuotaCore", "QuotaStore"], path: "packages/QuotaSync/Sources/QuotaSync"),
         .testTarget(name: "QuotaSyncTests", dependencies: ["QuotaCore", "QuotaSync", "QuotaStore"], path: "tests/sync"),
         .target(name: "QuotaCollector", dependencies: ["QuotaCore", "QuotaStore", "QuotaProviders"], path: "packages/QuotaCollector/Sources/QuotaCollector"),
-        .testTarget(name: "QuotaCollectorTests", dependencies: ["QuotaCore", "QuotaStore", "QuotaProviders", "QuotaCollector", "CSQLite"], path: "tests/collector"),
+        .testTarget(name: "QuotaCollectorTests", dependencies: ["QuotaCore", "QuotaStore", "QuotaProviders", "QuotaCollector", "QuotaSync", "CSQLite"], path: "tests/collector"),
         .target(name: "QuotaProviders", dependencies: ["QuotaCore"], path: "packages/QuotaProviders/Sources/QuotaProviders"),
         .testTarget(name: "QuotaProviderTests", dependencies: ["QuotaCore", "QuotaProviders"], path: "tests/providers"),
         .systemLibrary(name: "CSQLite", path: "packages/QuotaStore/Sources/CSQLite"),

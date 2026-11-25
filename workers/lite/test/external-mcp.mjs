@@ -78,7 +78,7 @@ export async function verifyExternalMCP(base, writer, otherWriter, viewerHash, f
   assert.equal((await setRefs([ref])).status, 200);
   assert.equal((await tool('quota_health')).windowCount, 1); // Approved but no projection.
   const { id, providerId, ...receivedWindow } = window;
-  const publish = (remainingBps) => write(`/v1/shares/${ref.shareId}/projection`, 'PUT', { capturedAt: new Date().toISOString(), windows: [{ ...receivedWindow, remainingBps }, { ...receivedWindow, remainingBps: 4050 }] }, otherWriter.deviceToken);
+  const publish = (remainingBps) => write(`/v1/shares/${ref.shareId}/projection`, 'PUT', { capturedAt: new Date().toISOString(), windows: [{ ...receivedWindow, remainingBps }, { ...receivedWindow, remainingBps: 4050, fetchOutcome: 'error' }] }, otherWriter.deviceToken);
   assert.equal((await publish(5200)).status, 200);
   assert.equal((await setRefs([{ ...ref, viewerTokenHash: '0'.repeat(64) }, { ...ref, shareId: 'bogus-reference' }])).status, 200);
   assert.equal((await tool('quota_health')).windowCount, 1);
@@ -100,6 +100,9 @@ export async function verifyExternalMCP(base, writer, otherWriter, viewerHash, f
   const receivedId = merged.windows[1].id;
   assert.match(receivedId, /^rs\.[a-f0-9]{64}$/);
   assert.notEqual(receivedId, merged.windows[2].id);
+  assert.deepEqual(merged.windows.map(w => w.stale), [false, false, true]);
+  assert.equal(merged.windows[2].remainingBps, 4050);
+  assert.equal((await tool('quota_health')).freshWindowCount, 2);
   assert.equal((await tool('quota_get', { windowId: receivedId })).remainingBps, 5200);
   assert.equal((await publish(4800)).status, 200);
   assert.equal((await tool('quota_get', { windowId: receivedId })).remainingBps, 4800);
@@ -130,10 +133,29 @@ export async function verifyExternalMCP(base, writer, otherWriter, viewerHash, f
   assert.equal((await upload({ ...projection, sequence: 12, windows: [stale] })).status, 200);
   assert.equal((await patch()).status, 200);
   assert.equal(JSON.parse((await call('quota_health')).body.result.content[0].text).stale, true);
+  activeToken = token;
+  const now = Date.now();
+  const observedAt = new Date(now - 60_000).toISOString(), resetsAt = new Date(now - 30_000).toISOString();
+  const nonCurrent = [
+    ...['error', 'throttled', 'disabled', 'auth_required'].map(fetchOutcome => ({ ...window, id: fetchOutcome, fetchOutcome })),
+    { ...window, id: 'unavailable', availability: 'unavailable', remainingBps: null },
+    { ...window, id: 'past-reset', observedAt, resetsAt },
+  ];
+  assert.equal((await upload({ ...projection, sequence: 13, windows: nonCurrent })).status, 200);
+  const nonCurrentHealth = await tool('quota_health');
+  assert.equal(nonCurrentHealth.available, true);
+  assert.equal(nonCurrentHealth.stale, false, 'legacy health describes timestamps only');
+  assert.equal(nonCurrentHealth.freshWindowCount, 0);
+  const current = { ...window, id: 'post-reset', observedAt: resetsAt, resetsAt };
+  assert.equal((await upload({ ...projection, sequence: 14, windows: [...nonCurrent, current] })).status, 200);
+  const eligibility = await tool('quota_list');
+  assert.deepEqual(eligibility.windows.map(w => w.stale), [...nonCurrent.map(() => true), false]);
+  assert.equal((await tool('quota_health')).freshWindowCount, 1);
+  assert.deepEqual(await tool('quota_get', { windowId: 'error' }), { ...nonCurrent[0], source: 'local', stale: true });
   // Revocation removes data and cannot be undone by a delayed uploader.
   assert.equal((await fetch(`${base}/v1/mcp-access`, { method: 'DELETE', headers: writerHeaders })).status, 200);
   assert.equal((await rpc('tools/list')).response.status, 401);
-  assert.equal((await upload({ ...projection, sequence: 13 })).status, 409);
+  assert.equal((await upload({ ...projection, sequence: 15 })).status, 409);
   assert.equal((await patch()).status, 409);
   assert.equal((await setRefs([])).status, 409);
   assert.equal((await setup()).status, 200);

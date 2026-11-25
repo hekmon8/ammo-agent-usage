@@ -30,6 +30,53 @@ final class QuotaQueryTests: XCTestCase {
         XCTAssertThrowsError(try query.status(requireFresh: true)) { XCTAssertEqual($0 as? QueryError, .noFreshData) }
     }
 
+    func testCurrentEligibilityDoesNotDiscardRetainedData() throws {
+        let now = QuotaRules.date("2026-09-05T01:42:00Z")!
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
+        let cases: [(String, FetchOutcome, Availability, Int, Int?, String)] = [
+            ("error", .error, .available, -60, nil, "stale"),
+            ("throttled", .throttled, .available, -60, nil, "stale"),
+            ("disabled", .disabled, .unlimited, -60, nil, "stale"),
+            ("auth", .authRequired, .available, -60, nil, "authRequired"),
+            ("unavailable", .ok, .unavailable, -60, nil, "unavailable"),
+            ("past-reset", .ok, .available, -60, 0, "resetPending"),
+            ("post-reset", .ok, .available, -30, -30, "fresh"),
+            ("current", .ok, .available, -60, 60, "fresh")
+        ]
+        let windows = cases.map { id, outcome, availability, observed, reset, _ in
+            QuotaWindow.reported(id: id, providerID: "codex", accountID: "private", alias: "Private Account",
+                key: id, remainingBps: availability == .available ? 6_800 : nil,
+                observedAt: now.addingTimeInterval(Double(observed)), staleAt: now.addingTimeInterval(600),
+                duration: 3_600, resetsAt: reset.map { now.addingTimeInterval(Double($0)) }, source: .localRPC,
+                availability: availability).withOutcome(outcome)
+                .withHistory(availability == .available ? [.observation(at: "2026-09-05T01:41:00Z", remainingBps: 6_800, segmentID: "test")] : [])
+        }
+        let snapshot = try Snapshot.make(windows: windows, deviceID: "mac", epoch: "test", sequence: 1, capturedAt: now)
+        try PrivateFile.write(SnapshotCodec.encode(snapshot), to: directory.appendingPathComponent("latest-public.json"))
+        let query = QuotaQuery(directory: directory, now: { now })
+
+        XCTAssertEqual(try query.list(includeStale: false, requireFresh: true).windows.map(\.id), ["post-reset", "current"])
+        XCTAssertEqual(try query.health().freshWindowCount, 2)
+        XCTAssertEqual(try query.health().staleWindowCount, 6)
+        XCTAssertThrowsError(try query.status(requireFresh: true)) { XCTAssertEqual($0 as? QueryError, .noFreshData) }
+        for (id, outcome, _, _, _, freshness) in cases {
+            let window = try query.get(windowId: id)
+            XCTAssertEqual(window.freshness, freshness, id)
+            XCTAssertEqual(window.fetchOutcome, outcome.rawValue)
+            if freshness != "fresh" {
+                XCTAssertThrowsError(try query.get(windowId: id, requireFresh: true)) { XCTAssertEqual($0 as? QueryError, .noFreshData) }
+                XCTAssertThrowsError(try query.history(windowId: id, range: 600, requireFresh: true)) { XCTAssertEqual($0 as? QueryError, .noFreshData) }
+            }
+        }
+        let retained = try query.history(windowId: "error", range: 600)
+        XCTAssertEqual(retained.window.value.remainingBps, 6_800)
+        XCTAssertEqual(retained.window.staleAt, "2026-09-05T01:52:00Z")
+        XCTAssertEqual(retained.points.map(\.remainingBps), [6_800])
+        XCTAssertFalse(String(decoding: try JSONEncoder().encode(retained), as: UTF8.self).contains("Private Account"))
+    }
+
     func testHistoryPreservesGapAndDeclaresItsBoundedScope() throws {
         let directory = try makeDirectory(fixture: "10-gap.json")
         let query = QuotaQuery(directory: directory, now: { QuotaRules.date("2026-09-05T01:42:00Z")! })

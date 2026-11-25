@@ -4,14 +4,18 @@ import QuotaCore
 import QuotaStore
 import QuotaProviders
 @testable import QuotaCollector
+@testable import QuotaSync
 
 private actor StubProvider: QuotaProvider {
     nonisolated let definition = ProviderDefinition(id: "test", displayName: "Test", source: .userDefined)
     nonisolated let accountID = "test_account"
     var calls = 0
+    private var shouldFail = false
+    func failNextFetch() { shouldFail = true }
     func fetch(now: Date) async throws -> [QuotaWindow] {
         calls += 1
         try await Task.sleep(for: .milliseconds(80))
+        if shouldFail { shouldFail = false; throw ProviderFailure.network }
         return [.reported(id: "test-primary", providerID: "test", accountID: accountID, alias: "Test", key: "primary", remainingBps: 6800, observedAt: now, staleAt: now.addingTimeInterval(600), duration: nil, resetsAt: nil, source: .userDefined)]
     }
 }
@@ -31,6 +35,60 @@ private actor StubProviderNamed: QuotaProvider {
     }
 }
 final class CollectorTests: XCTestCase {
+    func testFailedFetchPublishesRetainedMeasurementThroughRedactedMCPProducer() async throws {
+        actor Recorder {
+            var uploads: [Data] = []
+            func receive(_ request: URLRequest) -> (Data, HTTPURLResponse) {
+                if request.url!.path == "/v1/mcp-snapshot", let body = request.httpBody { uploads.append(body) }
+                return (Data(#"{"accepted":true}"#.utf8), HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!)
+            }
+        }
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let provider = StubProvider(), recorder = Recorder(), endpoint = URL(string: "https://quota.example.invalid")!
+        let transport = try SyncTransport(baseURL: endpoint) { await recorder.receive($0) }
+        let credentials = WriterCredentials(endpoint: endpoint, workspaceID: "test", deviceID: "mac", epoch: "epoch",
+            token: "synthetic", keyID: "test", signingPrivateKey: Data(), snapshotKey: Data())
+        let client = try RemoteMCPClient(credentials: credentials, transport: transport)
+        try await client.enable(token: String(repeating: "x", count: 43))
+        let store = try SnapshotStore(directory: directory)
+        func runPass() async throws {
+            let collector = try Collector(store: store, directory: directory, providers: [provider], deviceID: "mac", epoch: "epoch",
+                onPassComplete: { try? await client.upload($0) })
+            try await collector.start()
+            try await collector.refresh()
+            await collector.stop()
+        }
+        try await runPass()
+        let before = try XCTUnwrap(AtomicSnapshotReader(directory: directory).latest()?.windows.first)
+        await provider.failNextFetch()
+        // Reopen the published snapshot without waiting for the in-process fetch cooldown.
+        try await runPass()
+
+        let published = try XCTUnwrap(AtomicSnapshotReader(directory: directory).latest())
+        let retained = try XCTUnwrap(published.windows.first)
+        XCTAssertEqual(retained.fetchOutcome, .error)
+        XCTAssertEqual(retained.remainingBps, before.remainingBps)
+        XCTAssertEqual(retained.observedAt, before.observedAt)
+        XCTAssertEqual(retained.staleAt, before.staleAt)
+        XCTAssertGreaterThan(try XCTUnwrap(retained.staleAt.flatMap(QuotaRules.date)), Date())
+        XCTAssertFalse(retained.history.isEmpty)
+
+        let uploads = await recorder.uploads
+        XCTAssertEqual(uploads.count, 2)
+        let payload = try XCTUnwrap(JSONSerialization.jsonObject(with: XCTUnwrap(uploads.last)) as? [String: Any])
+        XCTAssertEqual(Set(payload.keys), ["capturedAt", "sequence", "sourceEpoch", "windows"])
+        XCTAssertEqual(payload["sequence"] as? Int64, published.sourceSequence)
+        let window = try XCTUnwrap((payload["windows"] as? [[String: Any]])?.first)
+        XCTAssertEqual(Set(window.keys), ["id", "providerId", "unit", "currency", "quotaKey", "availability",
+            "remainingBps", "amount", "limit", "quality", "fetchOutcome", "observedAt", "staleAt", "resetsAt"])
+        XCTAssertNotEqual(window["id"] as? String, retained.id)
+        XCTAssertEqual(window["fetchOutcome"] as? String, "error")
+        XCTAssertEqual(window["remainingBps"] as? Int, retained.remainingBps)
+        XCTAssertEqual(window["observedAt"] as? String, retained.observedAt)
+        XCTAssertEqual(window["staleAt"] as? String, retained.staleAt)
+    }
+
     func testIntervalChangesRescheduleFromLastFetchAndRestoreAfterLowPower() async throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: directory) }
