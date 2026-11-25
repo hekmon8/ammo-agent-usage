@@ -118,3 +118,12 @@ share take effect without uploading a new MCP snapshot. The MCP tools return
 only redacted windows, marked `local` or `received`. Received window IDs are
 opaque and can be passed to `quota_get`; labels and account metadata are not
 included.
+
+Several accounts of one provider (two Codex logins, two OpenRouter keys) upload
+as separate windows. Each window may carry an opaque `account` tag (64 hex;
+SHA-256 of the provider and the local account fingerprint, one tag per received
+share) so `quota_list` consumers can group them without learning which account
+they are. `account` is optional, so projections from clients that predate it
+stay valid and read back as `null`; `quota_list` accepts `{account}` to filter.
+Deploy this Worker revision before a Mac build that sends the tag: older Workers
+reject the extra key with `400 invalid_projection`.

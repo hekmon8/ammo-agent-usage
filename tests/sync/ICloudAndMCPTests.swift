@@ -93,6 +93,23 @@ final class ICloudAndMCPTests: XCTestCase {
         }
         XCTAssertNil(object["sourceDeviceId"])
     }
+    func testRemoteProjectionGroupsWindowsOfOneAccountWithAnOpaqueTag() throws {
+        let now = QuotaRules.date("2026-11-25T10:00:00Z")!
+        func window(_ id: String, _ account: String, _ key: String) -> QuotaWindow {
+            .reported(id: id, providerID: "codex", accountID: account, alias: "PRIVATE", key: key, remainingBps: 5_000,
+                      observedAt: now, staleAt: now.addingTimeInterval(600), duration: nil, resetsAt: nil, source: .localRPC)
+        }
+        let snapshot = try Snapshot.make(
+            windows: [window("a-1", "account-a", "primary"), window("a-2", "account-a", "credit-balance"), window("b-1", "account-b", "primary")],
+            deviceID: "mac", epoch: "epoch", sequence: 1, capturedAt: now)
+        let data = try RemoteMCPProjection.encode(snapshot, sourceEpoch: "server-epoch")
+        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        let windows = try XCTUnwrap(object["windows"] as? [[String: Any]])
+        let tags = windows.map { $0["account"] as? String }
+        XCTAssertEqual(tags.count, 3)
+        XCTAssertNotNil(tags[0]); XCTAssertEqual(tags[0], tags[1]); XCTAssertNotEqual(tags[0], tags[2])
+        XCTAssertFalse(String(decoding: data, as: UTF8.self).contains("account-a"))
+    }
     func testMCPHasNoNetworkBeforeConsentAndAfterDisable() async throws {
         actor Recorder {
             var paths: [String] = []
