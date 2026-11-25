@@ -22,7 +22,7 @@ final class NativeCodexSparkNormalizerTests: XCTestCase {
         let windows = try CodexNormalizer.normalize(
             data, accountID: "account", alias: "Codex", now: Date(timeIntervalSince1970: 1_700_000_000))
         XCTAssertEqual(windows.map(\.quotaKey), ["codex_bengalfox-primary", "codex_bengalfox-secondary"])
-        XCTAssertEqual(windows.map(\.id), ["codex-codex_bengalfox-primary", "codex-codex_bengalfox-secondary"])
+        XCTAssertEqual(windows.map(\.id), ["codex-account-codex_bengalfox-primary", "codex-account-codex_bengalfox-secondary"])
         XCTAssertTrue(windows.allSatisfy { $0.shortDisplayName.hasPrefix("Spark") })
         XCTAssertEqual(windows.map(\.window.durationSeconds), [18_000, 604_800])
     }
@@ -40,7 +40,7 @@ final class NativeCodexSparkNormalizerTests: XCTestCase {
         """#.utf8)
         let windows = try CodexNormalizer.normalize(data, accountID: "account", alias: "Codex", now: .now)
         XCTAssertEqual(windows.map(\.quotaKey), ["opaque-primary"])
-        XCTAssertEqual(windows.map(\.id), ["codex-opaque-primary"])
+        XCTAssertEqual(windows.map(\.id), ["codex-account-opaque-primary"])
     }
 
     func testOpaqueBengalfoxKeyWithoutMetadataStaysLegacyCompatible() throws {

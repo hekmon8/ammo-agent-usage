@@ -36,13 +36,27 @@ final class QuotaCoreTests: XCTestCase {
     }
     func testAllGoldenRoundTripsAndSchemaCopy() throws {
         let urls = try FileManager.default.contentsOfDirectory(at: root.appendingPathComponent("contracts/fixtures"), includingPropertiesForKeys: nil).filter { $0.pathExtension == "json" }
-        XCTAssertEqual(urls.count, 12)
+        XCTAssertEqual(urls.count, 13)
         for url in urls {
             let original = try Data(contentsOf: url)
             let encoded = try SnapshotCodec.encode(SnapshotCodec.decode(original))
             XCTAssertEqual(try JSONSerialization.jsonObject(with: original) as? NSDictionary, try JSONSerialization.jsonObject(with: encoded) as? NSDictionary, url.lastPathComponent)
         }
         XCTAssertEqual(try Data(contentsOf: root.appendingPathComponent("contracts/snapshot.schema.json")), try Data(contentsOf: root.appendingPathComponent("packages/QuotaCore/Sources/QuotaCore/Resources/snapshot.schema.json")))
+    }
+    func testWindowIdResolutionExactThenUniqueLegacyForm() throws {
+        let twoAccounts = try snapshot("13-two-accounts")
+        XCTAssertEqual(twoAccounts.window(forID: "codex-account_personal-primary")?.accountId, "account_personal")
+        XCTAssertEqual(twoAccounts.resolve(windowID: "codex-secondary").window?.id, "codex-account_work-secondary")
+        XCTAssertEqual(twoAccounts.resolve(windowID: "codex-primary").ambiguous, true)
+        XCTAssertNil(twoAccounts.window(forID: "codex-primary"))
+        XCTAssertEqual(twoAccounts.resolve(windowID: "missing").ambiguous, false)
+        XCTAssertNil(twoAccounts.window(forID: "missing"))
+        // An exact id always wins over the legacy form of another window.
+        let legacy = QuotaWindow.reported(id: "codex-primary", providerID: "codex", accountID: "legacy", alias: "Legacy", key: "other",
+            remainingBps: 1, observedAt: now, staleAt: now, duration: nil, resetsAt: nil, source: .userDefined)
+        let mixed = try Snapshot.make(windows: twoAccounts.windows + [legacy], deviceID: "mac", epoch: "epoch", sequence: 2, capturedAt: now)
+        XCTAssertEqual(mixed.window(forID: "codex-primary")?.accountId, "legacy")
     }
     func testDATA01Normalization() throws {
         XCTAssertEqual(try QuotaRules.remainingBps(usedPercent: "32"), 6800)

@@ -6,6 +6,19 @@ extension Snapshot {
         _ = try SnapshotCodec.encode(snapshot)
         return snapshot
     }
+
+    /// Exact id first. Ids that predate per-account scoping (`provider-quotaKey`)
+    /// still resolve while they name one window; `ambiguous` reports several.
+    public func resolve(windowID: String) -> (window: QuotaWindow?, ambiguous: Bool) {
+        if let exact = windows.first(where: { $0.id == windowID }) { return (exact, false) }
+        let legacy = windows.filter { $0.legacyID == windowID }
+        return legacy.count == 1 ? (legacy[0], false) : (nil, legacy.count > 1)
+    }
+    public func window(forID id: String) -> QuotaWindow? { resolve(windowID: id).window }
+}
+public extension QuotaWindow {
+    /// The id form used before window ids named their account.
+    var legacyID: String { providerId + "-" + quotaKey }
 }
 extension QuotaWindow {
     public static func reported(id: String, providerID: String, accountID: String, alias: String, key: String,

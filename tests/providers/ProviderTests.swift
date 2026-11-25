@@ -46,6 +46,24 @@ final class ProviderTests: XCTestCase {
         XCTAssertEqual(buckets.map(\.remainingBps), [9000, 3000])
         XCTAssertThrowsError(try CodexNormalizer.normalize(Data(#"{"rateLimits":{"primary":{"usedPercent":101}}}"#.utf8), accountID: "test", alias: "Test", now: Date()))
     }
+    func testCodexWindowIdsNameTheirAccountSoSeveralLoginsCoexist() throws {
+        let data = Data(#"{"rateLimits":{"primary":{"usedPercent":32,"windowDurationMins":300},"credits":{"hasCredits":true,"unlimited":false,"balance":"1"}},"rateLimitResetCredits":{"availableCount":2}}"#.utf8)
+        let work = try CodexNormalizer.normalize(data, accountID: "account-0123456789abcdef", alias: "Work", now: Date())
+        let personal = try CodexNormalizer.normalize(data, accountID: "account-fedcba9876543210", alias: "Personal", now: Date())
+        XCTAssertEqual(work.map(\.id), ["codex-account-0123456789abcdef-primary", "codex-account-0123456789abcdef-credit-balance",
+                                        "codex-account-0123456789abcdef-rate-limit-reset-credits"])
+        XCTAssertEqual(work.map(\.quotaKey), ["primary", "credit-balance", "rate-limit-reset-credits"])
+        XCTAssertTrue(Set(work.map(\.id)).isDisjoint(with: personal.map(\.id)))
+        XCTAssertEqual(work.map(\.legacyID), ["codex-primary", "codex-credit-balance", "codex-rate-limit-reset-credits"])
+        // A bucket id near the schema limit falls back to a digest instead of an oversized id.
+        let longBucket = Data(#"{"rateLimitsByLimitId":{"\#(String(repeating: "b", count: 40))":{"secondary":{"usedPercent":10}}}}"#.utf8)
+        let long = try CodexNormalizer.normalize(longBucket, accountID: "account-0123456789abcdef", alias: "Work", now: Date())
+        let other = try CodexNormalizer.normalize(longBucket, accountID: "account-fedcba9876543210", alias: "Personal", now: Date())
+        XCTAssertEqual(long.count, 1)
+        XCTAssertNotNil(long[0].id.range(of: "^codex-[a-f0-9]{56}$", options: .regularExpression))
+        XCTAssertNotEqual(long[0].id, other[0].id)
+        _ = try Snapshot.make(windows: work + personal + long + other, deviceID: "test", epoch: "test", sequence: 1, capturedAt: Date())
+    }
     func testCodexCreditsAndResetCountSurviveSnapshotRoundTrip() throws {
         // Codex CLI 0.153.2 generated GetAccountRateLimitsResponse contract.
         let data = Data(#"{"rateLimits":{"credits":{"hasCredits":true,"unlimited":false,"balance":"12.50"}},"rateLimitsByLimitId":{"codex":{"primary":{"usedPercent":32},"credits":{"hasCredits":true,"unlimited":false,"balance":"12.50"}},"spark":{"primary":{"usedPercent":10},"credits":{"hasCredits":true,"unlimited":false,"balance":"12.50"}}},"rateLimitResetCredits":{"availableCount":4,"credits":[]}}"#.utf8)
