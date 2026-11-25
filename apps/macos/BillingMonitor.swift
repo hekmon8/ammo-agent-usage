@@ -175,6 +175,7 @@ final class BillingMonitor: ObservableObject {
     }
     func observe(_ windows: [QuotaWindow], now: Date = Date()) {
         var next = state
+        rekeyLegacyRules(in: &next, windows: windows)
         var events: [(QuotaWindow, BillingSeverity)] = []
         for window in windows {
             guard let rule = next.rules[window.id] else { continue }
@@ -224,6 +225,19 @@ final class BillingMonitor: ObservableObject {
                     if generations[window.id] == generation { message = L("billing.notificationUnavailable") }
                 }
             }
+        }
+    }
+
+    /// Rules saved before window ids named their account were keyed `provider-quotaKey`.
+    /// Re-key once, only while that key still names a single window.
+    private func rekeyLegacyRules(in next: inout State, windows: [QuotaWindow]) {
+        for window in windows where next.rules[window.id] == nil {
+            let legacy = window.legacyID
+            guard let rule = next.rules[legacy], windows.filter({ $0.legacyID == legacy }).count == 1 else { continue }
+            next.rules[window.id] = BillingRule(windowID: window.id, kind: rule.kind, currency: rule.currency,
+                                                  warning: rule.warning, critical: rule.critical, enabled: rule.enabled)
+            next.rules[legacy] = nil
+            next.ledger.rekey(from: legacy, to: window.id)
         }
     }
 }

@@ -159,4 +159,32 @@ final class BillingMonitorTests: XCTestCase {
         XCTAssertTrue(client.delivered.isEmpty)
     }
 
+    @MainActor
+    func testProviderKeyedRuleMovesToTheAccountScopedIdOnlyWhileItNamesOneWindow() {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let file = directory.appendingPathComponent("rules.json")
+        let monitor = BillingMonitor(file: file, notifications: Notifications())
+        // Saved before Codex window ids carried an account.
+        XCTAssertTrue(monitor.save(BillingRule(windowID: "codex-primary", kind: .quota, currency: nil, warning: "40", critical: "10")))
+        let now = Date()
+        func window(_ id: String, _ account: String) -> QuotaWindow {
+            .reported(id: id, providerID: "codex", accountID: account, alias: account, key: "primary", remainingBps: 2_000,
+                      observedAt: now, staleAt: now.addingTimeInterval(600), duration: nil, resetsAt: nil, source: .localRPC)
+        }
+        let work = window("codex-account_work-primary", "account_work")
+        let personal = window("codex-account_personal-primary", "account_personal")
+        // Two accounts share the old key, so it keeps applying to neither.
+        monitor.observe([work, personal], now: now)
+        XCTAssertEqual(monitor.rules.keys.sorted(), ["codex-primary"])
+        XCTAssertEqual(monitor.severity(for: work, now: now), .normal)
+        XCTAssertEqual(monitor.severity(for: personal, now: now), .normal)
+        // One account: the rule moves once and keeps protecting the account-scoped window.
+        monitor.observe([work], now: now)
+        XCTAssertEqual(monitor.rules.keys.sorted(), ["codex-account_work-primary"])
+        XCTAssertEqual(monitor.rules["codex-account_work-primary"]?.warning, "40")
+        XCTAssertEqual(monitor.severity(for: work, now: now), .warning)
+        XCTAssertEqual(BillingMonitor(file: file, notifications: Notifications()).rules.keys.sorted(), ["codex-account_work-primary"])
+    }
+
 }
