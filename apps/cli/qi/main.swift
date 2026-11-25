@@ -12,8 +12,8 @@ struct QiCommand {
             switch command.action {
             case .status:
                 try printJSON(query.status(requireFresh: command.requireFresh))
-            case .list(let provider, let includeStale):
-                try printJSON(query.list(providerId: provider, includeStale: includeStale, requireFresh: command.requireFresh))
+            case .list(let provider, let account, let includeStale):
+                try printJSON(query.list(providerId: provider, accountId: account, includeStale: includeStale, requireFresh: command.requireFresh))
             case .get(let id):
                 try printJSON(query.get(windowId: id, requireFresh: command.requireFresh))
             case .history(let id, let range):
@@ -61,7 +61,7 @@ struct QiCommand {
 private struct RefreshResult: Codable { let schemaVersion, result: String }
 
 struct Command {
-    enum Action { case status, list(String?, Bool), get(String), history(String, TimeInterval), doctor, refresh(String?, TimeInterval), mcp }
+    enum Action { case status, list(String?, String?, Bool), get(String), history(String, TimeInterval), doctor, refresh(String?, TimeInterval), mcp }
     let directory: URL
     let requireFresh: Bool
     let action: Action
@@ -91,16 +91,17 @@ struct Command {
             guard let operation = args.first else { throw CommandError("Expected quota list or quota get", 2) }
             args.removeFirst()
             if operation == "list" {
-                var provider: String?; var includeStale = true
+                var provider: String?; var account: String?; var includeStale = true
                 while let flag = args.first {
                     switch flag {
                     case "--provider": args.removeFirst(); guard let id = args.first, !id.hasPrefix("-") else { throw CommandError("--provider requires an id", 2) }; provider = args.removeFirst()
+                    case "--account": args.removeFirst(); guard let id = args.first, !id.hasPrefix("-") else { throw CommandError("--account requires an id", 2) }; account = args.removeFirst()
                     case "--include-stale": args.removeFirst(); includeStale = true
                     case "--exclude-stale": args.removeFirst(); includeStale = false
                     default: throw CommandError("Unknown argument: \(flag)", 2)
                     }
                 }
-                action = .list(provider, includeStale)
+                action = .list(provider, account, includeStale)
             } else if operation == "get" {
                 guard args.count == 2, args[0] == "--window", !args[1].hasPrefix("-") else { throw CommandError("quota get requires --window <id>", 2) }
                 action = .get(args[1])

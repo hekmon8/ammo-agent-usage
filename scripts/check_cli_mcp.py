@@ -18,6 +18,12 @@ with tempfile.TemporaryDirectory(prefix='qi-cli-') as raw:
     assert run('status', '--require-fresh').returncode == 4
     assert run('refresh', '--wait', '--timeout', '1').returncode == 3
     assert run('quota', 'delete', '--window', 'anything').returncode == 2
+    account_list = run('quota', 'list', '--provider', 'codex', '--account', 'account_demo')
+    assert account_list.returncode == 0, account_list.stderr
+    assert [w['accountId'] for w in json.loads(account_list.stdout)['windows']] == ['account_demo']
+    assert json.loads(account_list.stdout)['windows'][0]['accountAlias']
+    assert run('quota', 'list', '--account').returncode == 2
+    assert json.loads(run('quota', 'list', '--account', 'nobody').stdout)['windows'] == []
     child = subprocess.Popen([str(qi), '--data-dir', raw, 'mcp', 'serve', '--stdio'], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, bufsize=1)
     selection = selectors.DefaultSelector(); selection.register(child.stdout, selectors.EVENT_READ)
     def send(value):
@@ -43,17 +49,26 @@ with tempfile.TemporaryDirectory(prefix='qi-cli-') as raw:
         assert receive(4)['result']['isError'] is True
         send({'jsonrpc':'2.0','id':5,'method':'resources/read','params':{'uri':'quota://snapshot/latest'}})
         assert receive(5)['result']['contents'][0]['mimeType'] == 'application/json'
+        responses = {}
         for identifier, name, arguments in [
             (6, 'quota_get', {'windowId': 'codex-primary'}),
             (7, 'quota_history', {'windowId': 'codex-primary', 'range': '24h'}),
             (8, 'quota_health', {}),
+            (10, 'quota_list', {'providerId': 'codex', 'accountId': 'account_demo'}),
         ]:
             send({'jsonrpc':'2.0','id':identifier,'method':'tools/call','params':{'name':name,'arguments':arguments}})
             response = receive(identifier)['result']
             assert response.get('isError') is not True, response
-            assert json.loads(response['content'][0]['text'])['schemaVersion'] == '1.0.0'
+            responses[identifier] = json.loads(response['content'][0]['text'])
+            assert responses[identifier]['schemaVersion'] == '1.0.0'
+        assert [(w['accountId'], w['accountAlias']) for w in responses[10]['windows']] == [('account_demo', '个人账户')]
+        send({'jsonrpc':'2.0','id':11,'method':'tools/call','params':{'name':'quota_list','arguments':{'accountId': 'account_demo', 'extra': 1}}})
+        assert receive(11)['result']['isError'] is True
         send({'jsonrpc':'2.0','id':9,'method':'resources/read','params':{'uri':'quota://providers'}})
-        assert receive(9)['result']['contents'][0]['mimeType'] == 'application/json'
+        providers_resource = receive(9)['result']
+        assert providers_resource['contents'][0]['mimeType'] == 'application/json'
+        providers = json.loads(providers_resource['contents'][0]['text'])
+        assert [(a['providerId'], a['accountId'], a['windowCount']) for a in providers['accounts']] == [('codex', 'account_demo', 1)]
         child.stdin.close(); child.wait(timeout=5)
         assert child.returncode == 0
     finally:

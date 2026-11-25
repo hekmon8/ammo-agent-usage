@@ -46,6 +46,37 @@ final class QuotaQueryTests: XCTestCase {
         XCTAssertThrowsError(try QueryArguments.rejectUnknown(["providerId", "writeCommand"], allowed: ["providerId", "includeStale"]))
     }
 
+    func testAccountsAreExposedAndFilterable() throws {
+        let directory = try makeDirectory(fixture: "13-two-accounts.json")
+        let query = QuotaQuery(directory: directory, now: { QuotaRules.date("2026-09-05T01:42:00Z")! })
+
+        let codex = try query.list(providerId: "codex").windows
+        XCTAssertEqual(codex.map(\.id), ["codex-account_work-primary", "codex-account_work-secondary", "codex-account_personal-primary"])
+        XCTAssertEqual(codex.map(\.accountId), ["account_work", "account_work", "account_personal"])
+        XCTAssertEqual(codex.map(\.accountAlias), ["工作账户", "工作账户", "个人账户"])
+        XCTAssertEqual(try query.list(providerId: "codex", accountId: "account_personal").windows.map(\.id), ["codex-account_personal-primary"])
+        XCTAssertTrue(try query.list(accountId: "missing").windows.isEmpty)
+        let providers = try query.providers()
+        XCTAssertEqual(providers.providerIds, ["codex"])
+        XCTAssertEqual(providers.accounts.map(\.accountId), ["account_work", "account_personal"])
+        XCTAssertEqual(providers.accounts.map(\.accountAlias), ["工作账户", "个人账户"])
+        XCTAssertEqual(providers.accounts.map(\.windowCount), [2, 1])
+    }
+
+    func testLegacyWindowIdResolvesOnlyWhileItNamesOneAccount() throws {
+        let now: @Sendable () -> Date = { QuotaRules.date("2026-09-05T01:42:00Z")! }
+        let single = QuotaQuery(directory: try makeDirectory(fixture: "01-fresh.json"), now: now)
+        XCTAssertEqual(try single.get(windowId: "codex-primary").id, "codex-primary")
+
+        let query = QuotaQuery(directory: try makeDirectory(fixture: "13-two-accounts.json"), now: now)
+        XCTAssertEqual(try query.get(windowId: "codex-account_personal-primary").value.remainingBps, 9100)
+        // The pre-account `provider-quotaKey` form still resolves while it names one window.
+        XCTAssertEqual(try query.get(windowId: "codex-secondary").id, "codex-account_work-secondary")
+        XCTAssertThrowsError(try query.get(windowId: "codex-primary")) { XCTAssertEqual($0 as? QueryError, .ambiguousWindow) }
+        XCTAssertThrowsError(try query.history(windowId: "codex-primary", range: 3600)) { XCTAssertEqual($0 as? QueryError, .ambiguousWindow) }
+        XCTAssertThrowsError(try query.get(windowId: "codex-missing")) { XCTAssertEqual($0 as? QueryError, .windowNotFound) }
+    }
+
     private func makeDirectory(fixture name: String) throws -> URL {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])

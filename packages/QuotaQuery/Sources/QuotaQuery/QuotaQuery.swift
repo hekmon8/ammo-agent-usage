@@ -25,27 +25,25 @@ public struct QuotaQuery: Sendable {
         return StatusProjection(schemaVersion: Self.schemaVersion, scope: "latest_snapshot", capturedAt: snapshot.capturedAt, windows: windows)
     }
 
-    public func list(providerId: String? = nil, includeStale: Bool = true, requireFresh: Bool = false) throws -> ListProjection {
+    public func list(providerId: String? = nil, accountId: String? = nil, includeStale: Bool = true, requireFresh: Bool = false) throws -> ListProjection {
         let snapshot = try load()
         let windows = snapshot.windows.map(project).filter { window in
-            (providerId == nil || window.providerId == providerId) && (includeStale || window.isFresh)
+            (providerId == nil || window.providerId == providerId) && (accountId == nil || window.accountId == accountId)
+                && (includeStale || window.isFresh)
         }
         if requireFresh, windows.isEmpty || windows.contains(where: { !$0.isFresh }) { throw QueryError.noFreshData }
         return ListProjection(schemaVersion: Self.schemaVersion, scope: "latest_snapshot", capturedAt: snapshot.capturedAt, windows: windows)
     }
 
     public func get(windowId: String, requireFresh: Bool = false) throws -> WindowProjection {
-        let snapshot = try load()
-        guard let window = snapshot.windows.first(where: { $0.id == windowId }) else { throw QueryError.windowNotFound }
-        let result = project(window)
+        let result = project(try window(try load(), windowId: windowId))
         if requireFresh, !result.isFresh { throw QueryError.noFreshData }
         return result
     }
 
     public func history(windowId: String, range: TimeInterval, requireFresh: Bool = false) throws -> HistoryProjection {
         guard range > 0, range <= 7 * 86_400 else { throw QueryError.invalidRange }
-        let snapshot = try load()
-        guard let window = snapshot.windows.first(where: { $0.id == windowId }) else { throw QueryError.windowNotFound }
+        let window = try window(try load(), windowId: windowId)
         let projection = project(window)
         if requireFresh, !projection.isFresh { throw QueryError.noFreshData }
         let cutoff = now().addingTimeInterval(-range)
@@ -69,8 +67,17 @@ public struct QuotaQuery: Sendable {
 
     public func providers() throws -> ProvidersProjection {
         let snapshot = try load()
+        var order: [String] = []
+        var accounts: [String: AccountProjection] = [:]
+        for window in snapshot.windows {
+            let key = window.providerId + "/" + window.accountId
+            if accounts[key] == nil { order.append(key) }
+            accounts[key] = AccountProjection(providerId: window.providerId, accountId: window.accountId, accountAlias: window.accountAlias,
+                                              windowCount: (accounts[key]?.windowCount ?? 0) + 1)
+        }
         return ProvidersProjection(schemaVersion: Self.schemaVersion, scope: "latest_snapshot",
-                                   providerIds: Array(Set(snapshot.windows.map(\.providerId))).sorted())
+                                   providerIds: Array(Set(snapshot.windows.map(\.providerId))).sorted(),
+                                   accounts: order.map { accounts[$0]! })
     }
 
     private func load() throws -> Snapshot {
@@ -81,10 +88,18 @@ public struct QuotaQuery: Sendable {
         catch { throw QueryError.unavailable }
     }
 
+    /// Exact id, else the pre-account `provider-quotaKey` form while it names one window.
+    private func window(_ snapshot: Snapshot, windowId: String) throws -> QuotaWindow {
+        let resolved = snapshot.resolve(windowID: windowId)
+        guard let window = resolved.window else { throw resolved.ambiguous ? QueryError.ambiguousWindow : QueryError.windowNotFound }
+        return window
+    }
+
     private func project(_ window: QuotaWindow) -> WindowProjection {
         let freshness = QuotaRules.state(window, now: now()).rawValue
         return WindowProjection(schemaVersion: Self.schemaVersion, scope: "latest_snapshot", id: window.id,
-                                providerId: window.providerId, quotaKey: window.quotaKey, unit: window.unit.rawValue,
+                                providerId: window.providerId, accountId: window.accountId, accountAlias: window.accountAlias,
+                                quotaKey: window.quotaKey, unit: window.unit.rawValue,
                                 currency: window.currency, value: .init(remainingBps: window.remainingBps, amount: window.amount, limit: window.limit),
                                 availability: window.availability.rawValue, quality: window.quality.rawValue,
                                 sourceMethod: window.sourceMethod.rawValue, fetchOutcome: window.fetchOutcome.rawValue,
@@ -94,12 +109,13 @@ public struct QuotaQuery: Sendable {
 }
 
 public enum QueryError: Error, Equatable, CustomStringConvertible {
-    case unavailable, noFreshData, windowNotFound, invalidRange, invalidArgument
+    case unavailable, noFreshData, windowNotFound, ambiguousWindow, invalidRange, invalidArgument
     public var description: String {
         switch self {
         case .unavailable: return "Ammo is not initialized or its collector snapshot is unavailable."
         case .noFreshData: return "No data satisfies the requested freshness requirement."
         case .windowNotFound: return "The requested quota window was not found."
+        case .ambiguousWindow: return "The window id matches several accounts of one provider; use the account-scoped id returned by quota list."
         case .invalidRange: return "History range must be greater than zero and at most seven days."
         case .invalidArgument: return "Unknown or invalid query argument."
         }
@@ -116,7 +132,7 @@ public enum QueryArguments {
 
 public struct QuotaValue: Codable, Sendable { public let remainingBps: Int?; public let amount: String?; public let limit: String? }
 public struct WindowProjection: Codable, Sendable {
-    public let schemaVersion, scope, id, providerId, quotaKey, unit: String
+    public let schemaVersion, scope, id, providerId, accountId, accountAlias, quotaKey, unit: String
     public let currency: String?; public let value: QuotaValue
     public let availability, quality, sourceMethod, fetchOutcome: String
     public let observedAt, staleAt, freshness, resetsAt: String?
@@ -125,7 +141,12 @@ public struct WindowProjection: Codable, Sendable {
 public struct StatusProjection: Codable, Sendable { public let schemaVersion, scope, capturedAt: String; public let windows: [WindowProjection] }
 public struct ListProjection: Codable, Sendable { public let schemaVersion, scope, capturedAt: String; public let windows: [WindowProjection] }
 public struct HealthProjection: Codable, Sendable { public let schemaVersion, scope, capturedAt: String; public let windowCount, freshWindowCount, staleWindowCount: Int }
-public struct ProvidersProjection: Codable, Sendable { public let schemaVersion, scope: String; public let providerIds: [String] }
+public struct ProvidersProjection: Codable, Sendable {
+    public let schemaVersion, scope: String
+    public let providerIds: [String]
+    public let accounts: [AccountProjection]
+}
+public struct AccountProjection: Codable, Sendable { public let providerId, accountId, accountAlias: String; public let windowCount: Int }
 public struct HistoryProjection: Codable, Sendable {
     public struct Point: Codable, Sendable { public let observedAt: String; public let remainingBps: Int?; public let segmentId: String; public let gap: Bool }
     public let schemaVersion, scope: String; public let window: WindowProjection; public let rangeSeconds: Int
