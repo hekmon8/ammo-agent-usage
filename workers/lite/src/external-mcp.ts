@@ -165,8 +165,20 @@ export async function handleMCP(request: Request, env: Env): Promise<Response> {
     })));
   }
   const now = Date.now();
-  const windows = merged.map(w => ({ ...w, stale: !w.staleAt || Date.parse(w.staleAt as string) <= now || !w.observedAt || Date.parse(w.observedAt as string) > now + 120000 }));
-  if (body.params.name === "quota_health") return content({ available: true, capturedAt, windowCount: windows.length, stale: windows.every(w => w.stale) });
+  let allTimeStale = true;
+  const windows = merged.map(w => {
+    const observed = Date.parse(w.observedAt as string);
+    const reset = Date.parse(w.resetsAt as string);
+    const timeStale = !w.staleAt || Date.parse(w.staleAt as string) <= now || !w.observedAt || observed > now + 120000;
+    allTimeStale &&= timeStale;
+    return { ...w, stale: timeStale || w.fetchOutcome !== "ok" || w.availability === "unavailable"
+      || (reset <= now && observed < reset) };
+  });
+  if (body.params.name === "quota_health") {
+    // Existing clients use `stale` for timestamp health, not quota eligibility.
+    return content({ available: true, capturedAt, windowCount: windows.length, stale: allTimeStale,
+      freshWindowCount: windows.filter(w => !w.stale).length });
+  }
   if (body.params.name === "quota_get") { const window = windows.find(w => w.id === args.windowId); return content(window ?? { available: false, reason: "Window not found" }, !window); }
   return content({ capturedAt, windows });
 }
