@@ -12,8 +12,8 @@ public struct QuotaMCPServer: Sendable {
                             capabilities: .init(resources: .init(), tools: .init()), configuration: .strict)
         await server.withMethodHandler(ListTools.self) { _ in
             .init(tools: [
-                Tool(name: "quota_list", description: "Read quota windows from the latest local snapshot. No refresh is performed.", inputSchema: try! schema("quota-list-input.schema"), annotations: .init(readOnlyHint: true, idempotentHint: true, openWorldHint: false), outputSchema: try! schema("quota-query-output.schema")),
-                Tool(name: "quota_get", description: "Read one quota window from the latest local snapshot.", inputSchema: try! schema("quota-get-input.schema"), annotations: .init(readOnlyHint: true, idempotentHint: true, openWorldHint: false), outputSchema: try! schema("quota-query-output.schema")),
+                Tool(name: "quota_list", description: "Read quota windows from the latest local snapshot, optionally for one provider and one account. Several accounts of one provider (for example two Codex logins) are separate windows with their own accountId and accountAlias. No refresh is performed.", inputSchema: try! schema("quota-list-input.schema"), annotations: .init(readOnlyHint: true, idempotentHint: true, openWorldHint: false), outputSchema: try! schema("quota-query-output.schema")),
+                Tool(name: "quota_get", description: "Read one quota window from the latest local snapshot by the id returned by quota_list.", inputSchema: try! schema("quota-get-input.schema"), annotations: .init(readOnlyHint: true, idempotentHint: true, openWorldHint: false), outputSchema: try! schema("quota-query-output.schema")),
                 Tool(name: "quota_history", description: "Read bounded history embedded in the latest local snapshot.", inputSchema: try! schema("quota-history-input.schema"), annotations: .init(readOnlyHint: true, idempotentHint: true, openWorldHint: false), outputSchema: try! schema("quota-query-output.schema")),
                 Tool(name: "quota_health", description: "Read local snapshot health without secrets or paths.", inputSchema: try! schema("quota-health-input.schema"), annotations: .init(readOnlyHint: true, idempotentHint: true, openWorldHint: false), outputSchema: try! schema("quota-query-output.schema"))
             ])
@@ -24,10 +24,11 @@ public struct QuotaMCPServer: Sendable {
                 switch request.name {
                 case "quota_list":
                     let arguments = try object(request.arguments)
-                    try rejectUnknown(arguments, allowed: ["providerId", "includeStale"])
+                    try rejectUnknown(arguments, allowed: ["providerId", "accountId", "includeStale"])
                     let provider = try optionalString(arguments, "providerId")
+                    let account = try optionalString(arguments, "accountId")
                     let includeStale = try optionalBool(arguments, "includeStale") ?? true
-                    response = try json(query.list(providerId: provider, includeStale: includeStale))
+                    response = try json(query.list(providerId: provider, accountId: account, includeStale: includeStale))
                 case "quota_get":
                     let arguments = try object(request.arguments)
                     try rejectUnknown(arguments, allowed: ["windowId"])
@@ -50,7 +51,7 @@ public struct QuotaMCPServer: Sendable {
         await server.withMethodHandler(ListResources.self) { _ in
             .init(resources: [
                 Resource(name: "Latest quota snapshot", uri: "quota://snapshot/latest", description: "Latest redacted quota projection.", mimeType: "application/json"),
-                Resource(name: "Quota providers", uri: "quota://providers", description: "Provider identifiers in the latest snapshot.", mimeType: "application/json")
+                Resource(name: "Quota providers", uri: "quota://providers", description: "Providers and their accounts (accountId, accountAlias, window count) in the latest snapshot.", mimeType: "application/json")
             ])
         }
         await server.withMethodHandler(ReadResource.self) { request in

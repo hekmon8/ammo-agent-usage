@@ -70,6 +70,24 @@ final class WidgetTests: XCTestCase {
         XCTAssertEqual(snapshot.windows.map { $0.id }, ["first", "second"])
     }
 
+    func testLegacyWindowIdResolvesWhileItNamesOneWindow() throws {
+        let now = Date(timeIntervalSince1970: 1_788_572_460)
+        func window(_ id: String, _ account: String) -> QuotaWindow {
+            .reported(id: id, providerID: "codex", accountID: account, alias: "Work", key: "primary", remainingBps: 6_800,
+                      observedAt: now, staleAt: now.addingTimeInterval(600), duration: 18_000, resetsAt: nil, source: .userDefined)
+        }
+        let work = window("codex-account_work-primary", "account_work")
+        let personal = window("codex-account_personal-primary", "account_personal")
+        // A widget configured before Codex ids carried an account keeps its window.
+        let single = try Snapshot.make(windows: [work], deviceID: "mac", epoch: "epoch", sequence: 1, capturedAt: now)
+        XCTAssertEqual(WidgetProjection(snapshot: single, entryDate: now, fixedWindowID: "codex-primary").values.map { $0.window.id }, [work.id])
+        // Once two accounts share the old id it names neither, and the widget reports a missing choice.
+        let two = try Snapshot.make(windows: [work, personal], deviceID: "mac", epoch: "epoch", sequence: 1, capturedAt: now)
+        let ambiguous = WidgetProjection(snapshot: two, entryDate: now, fixedWindowID: "codex-primary")
+        XCTAssertTrue(ambiguous.isFixedWindowUnknown)
+        XCTAssertEqual(ambiguous.missingWindowSelectionCount, 1)
+    }
+
     func testConfiguredWindowsStayInOrderAndMediumProjectionStaysBounded() throws {
         let now = Date(timeIntervalSince1970: 1_788_572_460)
         let windows = ["first", "fixed", "third"].map { id in

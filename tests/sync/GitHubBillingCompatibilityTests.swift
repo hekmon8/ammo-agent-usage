@@ -1,5 +1,6 @@
 import Foundation
 import XCTest
+import CryptoKit
 import QuotaCore
 @testable import QuotaSync
 
@@ -42,10 +43,12 @@ final class GitHubBillingCompatibilityTests: XCTestCase {
         let projection = try RemoteMCPProjection.encode(snapshot, sourceEpoch: "test")
         let object = try XCTUnwrap(JSONSerialization.jsonObject(with: projection) as? [String: Any])
         let value = try XCTUnwrap((object["windows"] as? [[String: Any]])?.first)
-        XCTAssertEqual(Set(value.keys), Set(["id", "providerId", "unit", "currency", "quotaKey", "availability",
+        XCTAssertEqual(Set(value.keys), Set(["id", "providerId", "account", "unit", "currency", "quotaKey", "availability",
             "remainingBps", "amount", "limit", "quality", "fetchOutcome", "observedAt", "staleAt", "resetsAt"]))
         XCTAssertEqual(value["amount"] as? String, "8")
         XCTAssertEqual(value["quotaKey"] as? String, "cost-spend")
+        // The account digest never carries the raw account id.
+        XCTAssertEqual(value["account"] as? String, SHA256.hash(data: Data("github-actions/native-synthetic-hash".utf8)).map { String(format: "%02x", $0) }.joined())
         for field in ["limit", "remainingBps", "resetsAt"] { XCTAssertTrue(value[field] is NSNull) }
         let text = String(decoding: projection, as: UTF8.self)
         for forbidden in ["PRIVATE_LOCAL_ALIAS", "native-synthetic-hash", "github-synthetic-window",

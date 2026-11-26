@@ -34,7 +34,7 @@ public struct WidgetProjection: Sendable {
         self.isLocked = isLocked
         let requestedIDs = WidgetSelectionPolicy.resolve(configured: fixedWindowIDs, defaults: fixedWindowID.map { [$0] } ?? [])
         self.requiresWindowSelection = requiresWindowSelection && requestedIDs.isEmpty
-        let selected = requestedIDs.compactMap { id in snapshot?.windows.first(where: { $0.id == id }) }
+        let selected = requestedIDs.compactMap { id in snapshot?.window(forID: id) }
         missingWindowSelectionCount = requestedIDs.count - selected.count
         isFixedWindowUnknown = !requestedIDs.isEmpty && selected.isEmpty
         let windows: [QuotaWindow]

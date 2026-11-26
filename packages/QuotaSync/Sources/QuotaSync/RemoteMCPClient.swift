@@ -4,10 +4,15 @@ import QuotaCore
 
 /// A separate, explicitly consented projection. No account names, credentials,
 /// history, source paths, or original window identifiers cross this boundary.
+/// Windows of one account share an opaque `account` digest, so several accounts
+/// of one provider can be grouped without learning which account they are.
 public enum RemoteMCPProjection {
+    private static func digest(_ value: String) -> String {
+        SHA256.hash(data: Data(value.utf8)).map { String(format: "%02x", $0) }.joined()
+    }
     public static func encode(_ snapshot: Snapshot, sourceEpoch: String) throws -> Data {
         let windows: [[String: Any]] = snapshot.windows.map { w in
-            ["id": SHA256.hash(data: Data(w.id.utf8)).map { String(format: "%02x", $0) }.joined(),
+            ["id": digest(w.id), "account": digest(w.providerId + "/" + w.accountId),
              "providerId": w.providerId, "unit": w.unit.rawValue, "currency": w.currency as Any? ?? NSNull(), "quotaKey": w.quotaKey, "availability": w.availability.rawValue,
              "remainingBps": w.remainingBps as Any? ?? NSNull(), "amount": w.amount as Any? ?? NSNull(),
              "limit": w.limit as Any? ?? NSNull(), "quality": w.quality.rawValue,

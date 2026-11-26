@@ -57,6 +57,12 @@ public enum CodexNormalizer {
         let buckets = response.rateLimitsByLimitId.flatMap { $0.isEmpty ? nil : $0 }
             ?? response.rateLimits.map { ["default": $0] } ?? [:]
         var result: [QuotaWindow] = []
+        // Several Codex logins share one snapshot, so the id names its account.
+        // The wire schema caps ids at 80 characters; a long bucket id falls back to a digest.
+        func windowID(_ key: String) -> String {
+            let id = "codex-\(accountID)-\(key)"
+            return id.utf8.count <= 80 ? id : "codex-" + String(NativeProviderNormalizer.sha256(id).prefix(56))
+        }
         for (bucketID, bucket) in buckets.sorted(by: { $0.key < $1.key }) {
             guard bucketID.range(of: "^[A-Za-z0-9_-]{1,40}$", options: .regularExpression) != nil else { throw ProviderFailure.parseChanged }
             for (kind, window) in [("primary", bucket.primary), ("secondary", bucket.secondary)] {
@@ -71,7 +77,7 @@ public enum CodexNormalizer {
                 } else { duration = nil }
                 let reset = window.resetsAt.map { Date(timeIntervalSince1970: Double($0)) }
                 let key = bucketID == "default" ? kind : "\(bucketID)-\(kind)"
-                result.append(.reported(id: "codex-\(key)", providerID: "codex", accountID: accountID, alias: alias,
+                result.append(.reported(id: windowID(key), providerID: "codex", accountID: accountID, alias: alias,
                                         key: key, remainingBps: bps, observedAt: now, staleAt: now.addingTimeInterval(600),
                                         duration: duration, resetsAt: reset, source: source))
             }
@@ -81,7 +87,7 @@ public enum CodexNormalizer {
         let credits = response.rateLimits?.credits ?? buckets["codex"]?.credits ?? buckets["default"]?.credits
             ?? (buckets.count == 1 ? buckets.values.first?.credits : nil)
         func amountWindow(key: String, unit: QuotaWindow.Unit, amount: String?, unlimited: Bool = false, deadline: Date? = nil) -> QuotaWindow {
-            .providerValue(id: "codex-\(key)", providerID: "codex", accountID: accountID, alias: alias,
+            .providerValue(id: windowID(key), providerID: "codex", accountID: accountID, alias: alias,
                            key: key, unit: unit, currency: nil, availability: unlimited ? .unlimited : .available,
                            remainingBps: nil, amount: amount, limit: nil, quality: .reported, source: source,
                            observedAt: now, staleAt: now.addingTimeInterval(600), windowKind: .unknown,
@@ -113,7 +119,7 @@ public enum CodexNormalizer {
             let bps: Int
             do { bps = try QuotaRules.remainingBps(usedPercent: NSDecimalNumber(decimal: 100 - individual.remainingPercent).stringValue) }
             catch { throw ProviderFailure.parseChanged }
-            result.append(.providerValue(id: "codex-monthly-credit-limit", providerID: "codex", accountID: accountID,
+            result.append(.providerValue(id: windowID("monthly-credit-limit"), providerID: "codex", accountID: accountID,
                 alias: alias, key: "monthly-credit-limit", unit: .credits, currency: nil,
                 remainingBps: bps, amount: NSDecimalNumber(decimal: max(0, limit - used)).stringValue,
                 limit: individual.limit, quality: .reported, source: source, observedAt: now,

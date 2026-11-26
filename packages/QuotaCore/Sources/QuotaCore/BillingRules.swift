@@ -101,6 +101,11 @@ public struct BillingAlertLedger: Codable, Sendable {
     public private(set) var entries: [String: Entry] = [:]
     public init() {}
     public mutating func reset(_ windowID: String) { entries.removeValue(forKey: windowID) }
+    /// Carries alert history across a window id change so a re-keyed rule does not re-fire.
+    public mutating func rekey(from windowID: String, to newID: String) {
+        guard windowID != newID, entries[newID] == nil, let entry = entries.removeValue(forKey: windowID) else { return }
+        entries[newID] = entry
+    }
     public mutating func evaluate(_ rule: BillingRule, window: QuotaWindow, now: Date) -> BillingSeverity? {
         guard let value = rule.value(for: window, now: now), let observedAt = window.observedAt,
               let observed = QuotaRules.date(observedAt) else { return nil }

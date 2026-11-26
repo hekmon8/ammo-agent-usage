@@ -80,9 +80,10 @@ final class CollectorTests: XCTestCase {
         XCTAssertEqual(Set(payload.keys), ["capturedAt", "sequence", "sourceEpoch", "windows"])
         XCTAssertEqual(payload["sequence"] as? Int64, published.sourceSequence)
         let window = try XCTUnwrap((payload["windows"] as? [[String: Any]])?.first)
-        XCTAssertEqual(Set(window.keys), ["id", "providerId", "unit", "currency", "quotaKey", "availability",
+        XCTAssertEqual(Set(window.keys), ["id", "providerId", "account", "unit", "currency", "quotaKey", "availability",
             "remainingBps", "amount", "limit", "quality", "fetchOutcome", "observedAt", "staleAt", "resetsAt"])
         XCTAssertNotEqual(window["id"] as? String, retained.id)
+        XCTAssertFalse(String(decoding: try JSONSerialization.data(withJSONObject: payload), as: UTF8.self).contains("\"Test\"")) // StubProvider's alias stays local
         XCTAssertEqual(window["fetchOutcome"] as? String, "error")
         XCTAssertEqual(window["remainingBps"] as? Int, retained.remainingBps)
         XCTAssertEqual(window["observedAt"] as? String, retained.observedAt)
@@ -372,6 +373,27 @@ extension CollectorTests {
         XCTAssertEqual(Set(windows.map(\.accountId)), ["account_a", "account_b"])
         XCTAssertEqual(windows.count, 2)
         XCTAssertEqual(maximum, 1)
+        await collector.stop()
+    }
+
+    func testTwoCodexAccountsPublishSeparateAccountScopedWindows() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let now = Date()
+        let limits = Data(#"{"rateLimitsByLimitId":{"default":{"primary":{"usedPercent":32,"windowDurationMins":300}}}}"#.utf8)
+        func account(_ id: String) throws -> FixedWindowsProvider {
+            FixedWindowsProvider(providerID: "codex", accountID: id, windows: try CodexNormalizer.normalize(limits, accountID: id, alias: id, now: now))
+        }
+        let collector = try Collector(store: SnapshotStore(directory: directory), directory: directory,
+                                      providers: [try account("account_personal"), try account("account_work")],
+                                      deviceID: "mac", epoch: "epoch")
+        try await collector.start()
+        try await collector.refresh(providerID: "codex")
+        let windows = await collector.current()
+        XCTAssertEqual(windows.map(\.id), ["codex-account_personal-primary", "codex-account_work-primary"])
+        XCTAssertEqual(try AtomicSnapshotReader(directory: directory).latest()?.windows.map(\.accountId), ["account_personal", "account_work"])
+        let health = await collector.diagnostics()
+        XCTAssertEqual(health.map(\.outcome), [.ok, .ok])
         await collector.stop()
     }
 

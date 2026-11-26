@@ -14,15 +14,18 @@ type Observation = { capturedAt: string; windows: QuotaWindow[] };
 function validShareRef(value: unknown): value is ShareRef {
   return isRecord(value) && hasOnly(value, ["shareId", "viewerTokenHash"]) && stringField(value.shareId, 80, id) && stringField(value.viewerTokenHash, 64, hash);
 }
-const keys = ["id", "providerId", "unit", "currency", "quotaKey", "availability", "remainingBps", "amount", "limit", "quality", "fetchOutcome", "observedAt", "staleAt", "resetsAt"];
+const keys = ["id", "providerId", "account", "unit", "currency", "quotaKey", "availability", "remainingBps", "amount", "limit", "quality", "fetchOutcome", "observedAt", "staleAt", "resetsAt"];
+// `account` is an optional opaque tag so projections from clients that predate it stay valid.
+const requiredKeys = keys.filter(key => key !== "account");
 function canonicalSnapshot(value: Record<string, unknown>): string {
   const windows = value.windows as Record<string, unknown>[];
   return JSON.stringify({ sequence: value.sequence, capturedAt: value.capturedAt, sourceEpoch: value.sourceEpoch,
     windows: windows.map(window => Object.fromEntries(keys.map(key => [key, window[key]]))) });
 }
 export function validMCPWindow(v: unknown): boolean {
-  if (!isRecord(v) || !hasOnly(v, keys) || Object.keys(v).length !== keys.length) return false;
+  if (!isRecord(v) || !hasOnly(v, keys) || !requiredKeys.every(key => key in v)) return false;
   return stringField(v.id, 80, id) && stringField(v.providerId, 80, id)
+    && (v.account === undefined || v.account === null || stringField(v.account, 64, hash))
     && stringField(v.quotaKey, 80, /^[A-Za-z0-9_.-]+$/)
     && (v.currency === null || typeof v.currency === "string" && /^[A-Z]{3}$/.test(v.currency))
     && ["percent", "tokens", "requests", "credits", "money"].includes(v.unit as string)
@@ -121,19 +124,21 @@ export async function handleMCP(request: Request, env: Env): Promise<Response> {
   if (body.method === "initialize") {
     if (!isRecord(body.params) || typeof body.params.protocolVersion !== "string" || !isRecord(body.params.capabilities) || !isRecord(body.params.clientInfo) || !stringField(body.params.clientInfo.name, 128) || !stringField(body.params.clientInfo.version, 64)) return rpcError(-32602, "Invalid initialize params");
     const requested = body.params.protocolVersion;
-    return result({ protocolVersion: ["2025-03-26", "2025-06-18", "2025-11-25"].includes(requested) ? requested : "2025-11-25", capabilities: { tools: {} }, serverInfo: { name: "quota-island-http", version: "1.0.0" }, instructions: "Read-only redacted quotas. No account names or history. Respect stale and unavailable states; never total percentages across providers." });
+    return result({ protocolVersion: ["2025-03-26", "2025-06-18", "2025-11-25"].includes(requested) ? requested : "2025-11-25", capabilities: { tools: {} }, serverInfo: { name: "quota-island-http", version: "1.0.0" }, instructions: "Read-only redacted quotas. No account names or history. Several accounts of one provider share providerId; group their windows by the opaque account tag. Respect stale and unavailable states; never total percentages across providers." });
   }
   if (body.method === "ping") return result({});
   const annotations = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false };
   if (body.method === "tools/list") return result({ tools: [
-    { name: "quota_list", description: "Latest shared quota windows; inspect stale/unavailable states.", inputSchema: { type: "object", properties: {}, additionalProperties: false }, annotations },
+    { name: "quota_list", description: "Latest shared quota windows; several accounts of one provider are grouped by the opaque account tag. Inspect stale/unavailable states.", inputSchema: { type: "object", properties: { account: { type: "string", pattern: "^[a-f0-9]{64}$" } }, additionalProperties: false }, annotations },
     { name: "quota_get", description: "Read one shared quota window.", inputSchema: { type: "object", properties: { windowId: { type: "string" } }, required: ["windowId"], additionalProperties: false }, annotations },
     { name: "quota_health", description: "Whether a shared observation is available.", inputSchema: { type: "object", properties: {}, additionalProperties: false }, annotations }
   ] });
   if (body.method !== "tools/call") return rpcError(-32601, "Method not found");
   if (!isRecord(body.params) || !["quota_list", "quota_get", "quota_health"].includes(body.params.name as string)) return rpcError(-32602, "Unknown tool");
   const args = body.params.arguments ?? {};
-  if (!isRecord(args) || !hasOnly(args, body.params.name === "quota_get" ? ["windowId"] : []) || body.params.name === "quota_get" && !stringField(args.windowId, 80, windowId)) return rpcError(-32602, "Invalid arguments");
+  if (!isRecord(args) || !hasOnly(args, body.params.name === "quota_get" ? ["windowId"] : body.params.name === "quota_list" ? ["account"] : [])
+    || body.params.name === "quota_get" && !stringField(args.windowId, 80, windowId)
+    || body.params.name === "quota_list" && args.account !== undefined && !stringField(args.account, 64, hash)) return rpcError(-32602, "Invalid arguments");
   // Recheck after reading the request body. Ingress bounds the join to 80 local + 32 × 80 received windows.
   const { results: rows } = await env.DB.prepare(`WITH grant AS (
       SELECT snapshot_json, received_shares_json FROM mcp_access WHERE ${activeGrant}
@@ -152,21 +157,23 @@ export async function handleMCP(request: Request, env: Env): Promise<Response> {
   const content = (value: unknown, isError = false) => result({ content: [{ type: "text", text: JSON.stringify(value) }], isError });
   if (!local && !received.length) return content({ available: false, reason: "No shared observation; enable sharing and refresh on Mac." }, body.params.name !== "quota_health");
   let capturedAt = local?.capturedAt ?? received[0].captured_at!;
-  const merged: (QuotaWindow & { source: "local" | "received" })[] = (local?.windows ?? []).map(w => ({ ...w, source: "local" }));
+  const merged: (QuotaWindow & { source: "local" | "received" })[] = (local?.windows ?? []).map(w => ({ ...w, account: w.account ?? null, source: "local" }));
   for (const row of received) {
     if (Date.parse(row.captured_at!) > Date.parse(capturedAt)) capturedAt = row.captured_at!;
     const occurrences = new Map<unknown, number>();
     const shareWindows: Record<string, unknown>[] = JSON.parse(row.projection!);
+    // One share is one account, so its windows share one opaque tag.
+    const account = await sha256(JSON.stringify(["share", row.share_id]));
     merged.push(...await Promise.all(shareWindows.map(async w => {
       const n = occurrences.get(w.quotaKey) ?? 0;
       occurrences.set(w.quotaKey, n + 1);
       const id = `rs.${await sha256(JSON.stringify([row.share_id, w.quotaKey, n]))}`;
-      return { ...w, id, providerId: row.provider_id, source: "received" as const };
+      return { ...w, id, account, providerId: row.provider_id, source: "received" as const };
     })));
   }
   const now = Date.now();
   let allTimeStale = true;
-  const windows = merged.map(w => {
+  const windows: (QuotaWindow & { stale: boolean; source: "local" | "received" })[] = merged.map(w => {
     const observed = Date.parse(w.observedAt as string);
     const reset = Date.parse(w.resetsAt as string);
     const timeStale = !w.staleAt || Date.parse(w.staleAt as string) <= now || !w.observedAt || observed > now + 120000;
@@ -180,5 +187,5 @@ export async function handleMCP(request: Request, env: Env): Promise<Response> {
       freshWindowCount: windows.filter(w => !w.stale).length });
   }
   if (body.params.name === "quota_get") { const window = windows.find(w => w.id === args.windowId); return content(window ?? { available: false, reason: "Window not found" }, !window); }
-  return content({ capturedAt, windows });
+  return content({ capturedAt, windows: args.account === undefined ? windows : windows.filter(w => w.account === args.account) });
 }

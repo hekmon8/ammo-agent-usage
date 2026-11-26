@@ -9,6 +9,13 @@ each provider's official endpoints. No third-party provider code is embedded.
 
 Codex uses a digest-recorded, signed native app-server with a private UUID profile. Explicit browser login and recurring reads share its HOME, CODEX_HOME and TMPDIR, and force the file credential backend. The application never copies or switches the default Codex login. Profile directories are owner-only; existing auth.json must be a private regular file. Before launch, the selected executable must be a native Mach-O binary inside an OpenAI Developer ID-signed app bundle.
 
+Window ids name the connection's account (`codex-<account>-<key>`), so a machine
+login and several browser-login profiles coexist in one snapshot; each keeps its
+own windows, history and alerts. The pre-account `codex-<key>` id form still
+resolves for CLI/MCP reads, widgets and saved alert rules while it names one
+window. Other adapters already derive ids from the account (`native-<digest>`,
+`zcode-<account>-<key>`).
+
 ## Native API clients
 
 Each non-Codex connection stores one explicit credential in the app-owned
