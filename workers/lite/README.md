@@ -127,3 +127,10 @@ they are. `account` is optional, so projections from clients that predate it
 stay valid and read back as `null`; `quota_list` accepts `{account}` to filter.
 Deploy this Worker revision before a Mac build that sends the tag: older Workers
 reject the extra key with `400 invalid_projection`.
+
+For `quota_list` and `quota_get`, a window is marked `stale` if its timestamps
+are not current, its fetch did not succeed, it is unavailable, or its last
+observation predates a reset that has already passed. Last-known values are
+still returned. `quota_health.available` still means a projection exists and
+`quota_health.stale` still means all windows fail the timestamp checks alone.
+Use `freshWindowCount` on an available health response to count current windows.

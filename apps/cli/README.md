@@ -32,6 +32,12 @@ include `--data-dir <directory>` and `--require-fresh`. Exit codes distinguish
 invalid arguments (2), unavailable data or collector (3), stale data (4),
 permissions (5), and other failures or timeouts (6).
 
+The CLI and local MCP treat a quota as current only after a successful fetch,
+with an available or unlimited observation that has not expired and does not
+predate a reset that has already passed. Non-current results can still contain
+last-known values and history. `--exclude-stale` and MCP `includeStale: false`
+filter out all non-current windows.
+
 For an MCP client, start `.build/debug/qi-mcp` or
 `.build/debug/qi mcp serve --stdio`. Both use the official Swift MCP SDK and keep
 stdout reserved for protocol frames. The standalone executable accepts

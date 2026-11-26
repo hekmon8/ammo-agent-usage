@@ -96,14 +96,22 @@ public struct QuotaQuery: Sendable {
     }
 
     private func project(_ window: QuotaWindow) -> WindowProjection {
-        let freshness = QuotaRules.state(window, now: now()).rawValue
+        let state = QuotaRules.state(window, now: now())
+        let freshness: DisplayState
+        switch state {
+        case .fresh, .low, .exhausted, .unlimited:
+            // A failed fetch can retain the last measurement and its original TTL.
+            freshness = window.fetchOutcome == .ok && window.observedAt != nil ? state : .stale
+        default:
+            freshness = state
+        }
         return WindowProjection(schemaVersion: Self.schemaVersion, scope: "latest_snapshot", id: window.id,
                                 providerId: window.providerId, accountId: window.accountId, accountAlias: window.accountAlias,
                                 quotaKey: window.quotaKey, unit: window.unit.rawValue,
                                 currency: window.currency, value: .init(remainingBps: window.remainingBps, amount: window.amount, limit: window.limit),
                                 availability: window.availability.rawValue, quality: window.quality.rawValue,
                                 sourceMethod: window.sourceMethod.rawValue, fetchOutcome: window.fetchOutcome.rawValue,
-                                observedAt: window.observedAt, staleAt: window.staleAt, freshness: freshness,
+                                observedAt: window.observedAt, staleAt: window.staleAt, freshness: freshness.rawValue,
                                 resetsAt: window.window.resetsAt)
     }
 }

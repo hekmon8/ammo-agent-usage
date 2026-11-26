@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Synthetic public-boundary CLI and official-SDK MCP lifecycle acceptance."""
 import json, os, selectors, subprocess, tempfile
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 with tempfile.TemporaryDirectory(prefix='qi-cli-') as raw:
@@ -24,6 +25,20 @@ with tempfile.TemporaryDirectory(prefix='qi-cli-') as raw:
     assert json.loads(account_list.stdout)['windows'][0]['accountAlias']
     assert run('quota', 'list', '--account').returncode == 2
     assert json.loads(run('quota', 'list', '--account', 'nobody').stdout)['windows'] == []
+    snapshot = json.loads(target.read_bytes())
+    window = snapshot['windows'][0]
+    now = datetime.now(timezone.utc)
+    stamp = lambda delta: (now + delta).isoformat(timespec='seconds').replace('+00:00', 'Z')
+    snapshot['capturedAt'] = stamp(timedelta())
+    window.update(observedAt=stamp(timedelta(minutes=-1)), staleAt=stamp(timedelta(minutes=10)))
+    period = window['window']
+    period.update(startsAt=stamp(timedelta(hours=-1)), resetsAt=stamp(timedelta(seconds=period['durationSeconds'] - 3600)))
+    target.write_text(json.dumps(snapshot))
+    assert run('status', '--require-fresh').returncode == 0
+    window['fetchOutcome'] = 'error'
+    target.write_text(json.dumps(snapshot))
+    assert run('status', '--require-fresh').returncode == 4
+    assert json.loads(run('quota', 'list', '--exclude-stale').stdout)['windows'] == []
     child = subprocess.Popen([str(qi), '--data-dir', raw, 'mcp', 'serve', '--stdio'], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, bufsize=1)
     selection = selectors.DefaultSelector(); selection.register(child.stdout, selectors.EVENT_READ)
     def send(value):
@@ -44,7 +59,11 @@ with tempfile.TemporaryDirectory(prefix='qi-cli-') as raw:
         tools = receive(2)['result']['tools']
         assert {x['name'] for x in tools} == {'quota_list','quota_get','quota_history','quota_health'}
         send({'jsonrpc':'2.0','id':3,'method':'tools/call','params':{'name':'quota_list','arguments':{}}})
-        assert receive(3)['result'].get('isError') is not True
+        retained = json.loads(receive(3)['result']['content'][0]['text'])['windows'][0]
+        assert retained['fetchOutcome'] == 'error' and retained['freshness'] == 'stale'
+        assert retained['value']['remainingBps'] == window['remainingBps']
+        send({'jsonrpc':'2.0','id':10,'method':'tools/call','params':{'name':'quota_list','arguments':{'includeStale':False}}})
+        assert json.loads(receive(10)['result']['content'][0]['text'])['windows'] == []
         send({'jsonrpc':'2.0','id':4,'method':'tools/call','params':{'name':'shell','arguments':{'command':'invalid'}}})
         assert receive(4)['result']['isError'] is True
         send({'jsonrpc':'2.0','id':5,'method':'resources/read','params':{'uri':'quota://snapshot/latest'}})
