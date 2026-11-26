@@ -116,17 +116,19 @@ replacement key. Keep the viewer token and its delegation hash out of logs. A qu
 matching approved projections directly from D1, so publishing and revoking a
 share take effect without uploading a new MCP snapshot. The MCP tools return
 only redacted windows, marked `local` or `received`. Received window IDs are
-opaque and can be passed to `quota_get`; labels and account metadata are not
-included.
+opaque and can be passed to `quota_get`. Windows carry the user's own label
+`accountAlias` (received windows: the share's chosen label) and an opaque `account`
+tag; account identifiers are not included.
 
 Several accounts of one provider (two Codex logins, two OpenRouter keys) upload
 as separate windows. Each window may carry an opaque `account` tag (64 hex;
 SHA-256 of the provider and the local account fingerprint, one tag per received
-share) so `quota_list` consumers can group them without learning which account
-they are. `account` is optional, so projections from clients that predate it
+share) so `quota_list` consumers can group them, plus `accountAlias`, the label the
+user gave the account (up to 48 characters; the share label for received
+windows). Both keys are optional, so projections from clients that predate them
 stay valid and read back as `null`; `quota_list` accepts `{account}` to filter.
-Deploy this Worker revision before a Mac build that sends the tag: older Workers
-reject the extra key with `400 invalid_projection`.
+Deploy this Worker revision before a Mac build that sends them: older Workers
+reject the extra keys with `400 invalid_projection`.
 
 For `quota_list` and `quota_get`, a window is marked `stale` if its timestamps
 are not current, its fetch did not succeed, it is unavailable, or its last

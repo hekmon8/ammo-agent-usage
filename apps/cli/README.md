@@ -25,7 +25,7 @@ them. Window ids name their account (`codex-account-…-primary`); ids from befo
 accounts were carried (`codex-primary`) still resolve for `quota get` and
 `quota_history` while they match exactly one window, otherwise the call fails
 with exit code 2 and an ambiguous-id message. Remote MCP windows carry an opaque
-`account` tag instead of these local fields.
+`account` tag plus the label `accountAlias` instead of these local fields.
 
 `refresh` requests the running Mac collector through local IPC. Global options
 include `--data-dir <directory>` and `--require-fresh`. Exit codes distinguish

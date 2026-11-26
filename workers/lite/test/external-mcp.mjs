@@ -40,7 +40,8 @@ export async function verifyExternalMCP(base, writer, otherWriter, viewerHash, f
   const uploaded = await upload(projection);
   assert.equal(uploaded.status, 200, await uploaded.text());
   assert.equal((await upload({ ...projection, sequence: 9 })).status, 409);
-  assert.equal((await upload({ ...projection, windows: [{ ...window, accountAlias: 'never-share' }] })).status, 400);
+  assert.equal((await upload({ ...projection, windows: [{ ...window, accountAlias: 'x'.repeat(49) }] })).status, 400);
+  assert.equal((await upload({ ...projection, windows: [{ ...window, accountAlias: 'bad\u0001label' }] })).status, 400);
   assert.equal((await upload({ ...projection, sourceEpoch: 'wrong-epoch' })).status, 400);
   assert.equal((await upload(projection, { ...writerHeaders, authorization: `Bearer ${otherWriter.deviceToken}` })).status, 400);
   const money = { ...window, unit: 'money', currency: 'USD', remainingBps: null, amount: '123456789012345678901.123456789012' };
@@ -96,11 +97,13 @@ export async function verifyExternalMCP(base, writer, otherWriter, viewerHash, f
   assert.deepEqual(merged.windows.map(w => [w.providerId, w.source]), [['codex', 'local'], ['antigravity', 'received'], ['antigravity', 'received']]);
   assert.equal(merged.windows[0].id, 'window1');
   assert.equal(merged.windows[0].account, null); // Projection from a client without account tags.
+  assert.equal(merged.windows[0].accountAlias, null);
   assert.equal(merged.windows[0].amount, money.amount);
   assert.match(merged.windows[1].account, /^[a-f0-9]{64}$/); // One share is one account.
   assert.equal(merged.windows[1].account, merged.windows[2].account);
   assert.notEqual(merged.windows[1].account, merged.windows[0].account);
-  assert.ok(!/private-account|Private Share Label|private-connection|test-received-share/.test(JSON.stringify(merged)));
+  assert.equal(merged.windows[1].accountAlias, 'Private Share Label'); // The recipient already sees the chosen label.
+  assert.ok(!/private-account|private-connection|test-received-share/.test(JSON.stringify(merged)));
   const receivedId = merged.windows[1].id;
   assert.match(receivedId, /^rs\.[a-f0-9]{64}$/);
   assert.notEqual(receivedId, merged.windows[2].id);
@@ -133,22 +136,22 @@ export async function verifyExternalMCP(base, writer, otherWriter, viewerHash, f
   assert.equal((await setRefs([ref])).status, 409);
   assert.equal((await setup()).status, 200);
   activeHash = hash;
-  // Several accounts of one provider: opaque `account` tags group their windows and filter quota_list.
+  // Several accounts of one provider: opaque `account` tags group their windows and filter quota_list; `accountAlias` names them.
   const [accountA, accountB] = ['a'.repeat(64), 'b'.repeat(64)];
   assert.equal((await upload({ ...projection, sequence: 12, windows: [{ ...money, account: 'not-a-digest' }] })).status, 400);
   const twoAccounts = [
-    { ...window, id: 'a-primary', account: accountA },
-    { ...window, id: 'a-secondary', quotaKey: 'secondary', account: accountA },
-    { ...window, id: 'b-primary', account: accountB },
+    { ...window, id: 'a-primary', account: accountA, accountAlias: 'Work' },
+    { ...window, id: 'a-secondary', quotaKey: 'secondary', account: accountA, accountAlias: 'Work' },
+    { ...window, id: 'b-primary', account: accountB, accountAlias: 'Personal' },
   ];
   assert.equal((await upload({ ...projection, sequence: 12, windows: twoAccounts })).status, 200);
   // This fresh grant belongs to the original token, not the rotated one `tool` still holds.
   const read = async (name, args = {}) => (await rpc('tools/call', { name, arguments: args })).body;
   const grouped = JSON.parse((await read('quota_list')).result.content[0].text);
-  assert.deepEqual(grouped.windows.map(w => [w.id, w.account]), [['a-primary', accountA], ['a-secondary', accountA], ['b-primary', accountB]]);
+  assert.deepEqual(grouped.windows.map(w => [w.id, w.account, w.accountAlias]), [['a-primary', accountA, 'Work'], ['a-secondary', accountA, 'Work'], ['b-primary', accountB, 'Personal']]);
   assert.deepEqual(JSON.parse((await read('quota_list', { account: accountB })).result.content[0].text).windows.map(w => w.id), ['b-primary']);
   assert.deepEqual(JSON.parse((await read('quota_list', { account: 'f'.repeat(64) })).result.content[0].text).windows, []);
-  assert.equal(JSON.parse((await read('quota_get', { windowId: 'a-secondary' })).result.content[0].text).account, accountA);
+  assert.equal(JSON.parse((await read('quota_get', { windowId: 'a-secondary' })).result.content[0].text).accountAlias, 'Work');
   assert.equal((await read('quota_list', { account: 'short' })).error.code, -32602);
   assert.equal((await read('quota_list', { account: accountA, extra: 1 })).error.code, -32602);
   const stale = { ...window, observedAt: new Date(Date.now() - 120000).toISOString(), staleAt: new Date(Date.now() - 60000).toISOString() };
@@ -173,7 +176,7 @@ export async function verifyExternalMCP(base, writer, otherWriter, viewerHash, f
   const eligibility = await tool('quota_list');
   assert.deepEqual(eligibility.windows.map(w => w.stale), [...nonCurrent.map(() => true), false]);
   assert.equal((await tool('quota_health')).freshWindowCount, 1);
-  assert.deepEqual(await tool('quota_get', { windowId: 'error' }), { ...nonCurrent[0], account: null, source: 'local', stale: true });
+  assert.deepEqual(await tool('quota_get', { windowId: 'error' }), { ...nonCurrent[0], account: null, accountAlias: null, source: 'local', stale: true });
   // Revocation removes data and cannot be undone by a delayed uploader.
   assert.equal((await fetch(`${base}/v1/mcp-access`, { method: 'DELETE', headers: writerHeaders })).status, 200);
   assert.equal((await rpc('tools/list')).response.status, 401);
