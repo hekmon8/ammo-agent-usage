@@ -80,10 +80,11 @@ final class CollectorTests: XCTestCase {
         XCTAssertEqual(Set(payload.keys), ["capturedAt", "sequence", "sourceEpoch", "windows"])
         XCTAssertEqual(payload["sequence"] as? Int64, published.sourceSequence)
         let window = try XCTUnwrap((payload["windows"] as? [[String: Any]])?.first)
-        XCTAssertEqual(Set(window.keys), ["id", "providerId", "account", "unit", "currency", "quotaKey", "availability",
+        XCTAssertEqual(Set(window.keys), ["id", "providerId", "account", "accountAlias", "unit", "currency", "quotaKey", "availability",
             "remainingBps", "amount", "limit", "quality", "fetchOutcome", "observedAt", "staleAt", "resetsAt"])
         XCTAssertNotEqual(window["id"] as? String, retained.id)
-        XCTAssertFalse(String(decoding: try JSONSerialization.data(withJSONObject: payload), as: UTF8.self).contains("\"Test\"")) // StubProvider's alias stays local
+        XCTAssertEqual(window["accountAlias"] as? String, retained.accountAlias) // The user's own label is shared; identifiers are not.
+        XCTAssertNil(window["accountId"])
         XCTAssertEqual(window["fetchOutcome"] as? String, "error")
         XCTAssertEqual(window["remainingBps"] as? Int, retained.remainingBps)
         XCTAssertEqual(window["observedAt"] as? String, retained.observedAt)

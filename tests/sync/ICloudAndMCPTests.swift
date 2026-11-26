@@ -79,7 +79,7 @@ final class ICloudAndMCPTests: XCTestCase {
         try cache.clear()
         XCTAssertThrowsError(try cache.load(accountID: "apple-account-a"))
     }
-    func testRemoteProjectionExcludesIdentityAndHistory() throws {
+    func testRemoteProjectionKeepsLabelsButExcludesIdentifiersAndHistory() throws {
         let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
         let snapshot = try SnapshotCodec.decode(Data(contentsOf: root.appendingPathComponent("contracts/fixtures/01-fresh.json")))
         let data = try RemoteMCPProjection.encode(snapshot, sourceEpoch: "server-epoch")
@@ -87,7 +87,7 @@ final class ICloudAndMCPTests: XCTestCase {
         let windows = try XCTUnwrap(object["windows"] as? [[String: Any]])
         XCTAssertEqual(windows.count, snapshot.windows.count)
         for (index, window) in windows.enumerated() {
-            XCTAssertNil(window["accountAlias"]); XCTAssertNil(window["accountId"]); XCTAssertNil(window["history"])
+            XCTAssertEqual(window["accountAlias"] as? String, snapshot.windows[index].accountAlias); XCTAssertNil(window["accountId"]); XCTAssertNil(window["history"])
             XCTAssertNotEqual(window["id"] as? String, snapshot.windows[index].id)
             XCTAssertEqual(window["providerId"] as? String, snapshot.windows[index].providerId)
         }

@@ -43,15 +43,16 @@ final class GitHubBillingCompatibilityTests: XCTestCase {
         let projection = try RemoteMCPProjection.encode(snapshot, sourceEpoch: "test")
         let object = try XCTUnwrap(JSONSerialization.jsonObject(with: projection) as? [String: Any])
         let value = try XCTUnwrap((object["windows"] as? [[String: Any]])?.first)
-        XCTAssertEqual(Set(value.keys), Set(["id", "providerId", "account", "unit", "currency", "quotaKey", "availability",
+        XCTAssertEqual(Set(value.keys), Set(["id", "providerId", "account", "accountAlias", "unit", "currency", "quotaKey", "availability",
             "remainingBps", "amount", "limit", "quality", "fetchOutcome", "observedAt", "staleAt", "resetsAt"]))
         XCTAssertEqual(value["amount"] as? String, "8")
         XCTAssertEqual(value["quotaKey"] as? String, "cost-spend")
-        // The account digest never carries the raw account id.
+        // The account digest never carries the raw account id; the user's label is shared by design.
         XCTAssertEqual(value["account"] as? String, SHA256.hash(data: Data("github-actions/native-synthetic-hash".utf8)).map { String(format: "%02x", $0) }.joined())
+        XCTAssertEqual(value["accountAlias"] as? String, snapshot.windows.first?.accountAlias)
         for field in ["limit", "remainingBps", "resetsAt"] { XCTAssertTrue(value[field] is NSNull) }
         let text = String(decoding: projection, as: UTF8.self)
-        for forbidden in ["PRIVATE_LOCAL_ALIAS", "native-synthetic-hash", "github-synthetic-window",
+        for forbidden in ["native-synthetic-hash", "github-synthetic-window",
                           "budgets", "budget_amount", "prevent_further_usage", "alert_recipients", "Authorization", "token"] {
             XCTAssertFalse(text.contains(forbidden), forbidden)
         }
